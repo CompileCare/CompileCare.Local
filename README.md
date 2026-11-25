@@ -2,7 +2,7 @@
 
 One-click local development environment for the CompileCare hospital platform.
 
-This repository orchestrates the API, Web application and PostgreSQL in Docker Compose. It contains developer tooling only; hospital domain code remains in the API and Web repositories.
+This repository orchestrates the API, Web application, PostgreSQL and a preconfigured local Keycloak identity provider in Docker Compose. Hospital domain code remains in the API and Web repositories.
 
 ## Supported platforms
 
@@ -13,22 +13,35 @@ This repository orchestrates the API, Web application and PostgreSQL in Docker C
 
 1. Docker Desktop installed and running.
 2. GitHub CLI installed and authenticated to the CompileCare organization (`gh auth login`) to clone the private Web and API repositories.
-3. A development OIDC client for the Web app and API.
-4. A GitHub Personal Access Token with `read:packages` permission for the private CompileCare NuGet feed.
+3. A GitHub Personal Access Token with `read:packages` permission for the private CompileCare NuGet feed.
 
 Do not use production credentials or real patient data in local development.
 
 ## First launch
 
-The launcher clones `CompileCare.Api` and `CompileCare.Web` beside this repository when they are not already present. It creates `local/.env` from the sample and asks for development OIDC settings and a GitHub Packages token. Secrets stay in ignored local files.
+The launcher clones `CompileCare.Api` and `CompileCare.Web` beside this repository when they are not already present. It creates `local/.env` from the sample and asks for local OIDC settings and a GitHub Packages token. Secrets stay in ignored local files.
 
-Configure your identity provider with:
-- Authority/issuer URL reachable from the browser and API container.
-- API audience (default `compilecare-api`).
-- Web client ID (default `compilecare-web`).
-- Redirect URI `http://localhost:8080/auth/callback`.
-- Post-logout URI `http://localhost:8080`.
-- Required API scope.
+The local Keycloak realm is imported automatically on first startup:
+
+- Realm: `compilecare`
+- Authority/issuer: `http://keycloak.localhost:8082/realms/compilecare`
+- Web client: `compilecare-web` (public client, Authorization Code flow, PKCE S256)
+- API audience: `compilecare-api` (added to access tokens by the default `compilecare-api-audience` client scope)
+- Redirect URI: `http://localhost:8080/auth/callback`
+- Post-logout URI and Web origin: `http://localhost:8080`
+
+The `.localhost` hostname resolves to loopback in the browser and is also registered as a Docker network alias, allowing the browser and API container to use the same issuer URL. The local API explicitly opts into HTTP metadata only in Development.
+
+The local Keycloak bootstrap admin defaults are stored in the ignored `local/.env`. Change `KEYCLOAK_ADMIN_PASSWORD` before first startup. After the admin console is available, create a permanent administrator in the master realm and verify that account before deleting the temporary bootstrap administrator. Do not reuse these credentials outside local development.
+
+Keycloak imports the realm only when its data volume is first initialized. To intentionally reset the local identity provider and re-import the realm (this deletes local Keycloak users and configuration):
+
+```bash
+docker compose --env-file local/.env -f local/docker-compose.yml down
+docker volume rm compilecare-local_compilecare-keycloak
+```
+
+The launcher prompts if the earlier manually started `compilecare-keycloak` container is still running, because that temporary container occupies port 8082. Stop it once with `docker stop compilecare-keycloak`, then run the launcher again. The Compose-managed service will use that container name.
 
 ## Local endpoints
 
@@ -37,13 +50,15 @@ Configure your identity provider with:
 | Web | http://localhost:8080 |
 | API | http://localhost:8081 |
 | API OpenAPI (Development) | http://localhost:8081/openapi/v1.json |
+| Keycloak | http://keycloak.localhost:8082 |
+| Keycloak admin console | http://keycloak.localhost:8082/admin |
 | PostgreSQL | localhost:5432 (loopback only) |
 
 The API runs in Development with migrations explicitly enabled by this local Compose stack. This opt-in must not be used in Staging or Production. Normal deployments retain the default migration behavior.
 
 ## Stop
 
-Use **Stop CompileCare.command** or **Stop CompileCare.bat**. The PostgreSQL volume is retained. To intentionally delete the local database:
+Use **Stop CompileCare.command** or **Stop CompileCare.bat**. PostgreSQL and Keycloak volumes are retained. To intentionally delete the local database and identity provider:
 
 ```bash
 docker compose --env-file local/.env -f local/docker-compose.yml down --volumes
@@ -54,5 +69,6 @@ docker compose --env-file local/.env -f local/docker-compose.yml down --volumes
 - `local/.env` and `local/.secrets/` are ignored.
 - NuGet credentials are passed to Docker BuildKit as a secret, never a Docker ARG or image layer.
 - Database and service ports bind to loopback only.
+- Keycloak is local-development-only and has no production data or external exposure.
 - API authentication, validated issuer/audience, persisted tenant membership and authorization remain enabled.
 - No bypass login or automatic platform-operator bootstrap is provided.
