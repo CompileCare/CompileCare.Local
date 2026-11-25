@@ -22,6 +22,7 @@ jobs:
           if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
       - name: Validate Keycloak realm import
         run: |
+          python -m py_compile local/scripts/configure-keycloak.py
           python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
           python - <<'PY'
           import json
@@ -81,6 +82,8 @@ jobs:
           assert discovery["jwks_uri"].endswith("/protocol/openid-connect/certs")
           print("Keycloak realm import and OIDC discovery verified.")
           PY
+          echo "127.0.0.1 keycloak.localhost" | sudo tee -a /etc/hosts > /dev/null
+          KEYCLOAK_ADMIN_PASSWORD=LocalOnly-CI-Password-123! python3 local/scripts/configure-keycloak.py local/.env.example --base-url http://keycloak.localhost:8082
           admin_token="$(curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -d grant_type=password -d client_id=admin-cli \
             -d username=admin -d password=LocalOnly-CI-Password-123! \
