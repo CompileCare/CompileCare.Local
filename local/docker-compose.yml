@@ -92,6 +92,7 @@ services:
         VITE_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:8080
         VITE_OIDC_SCOPE: ${OIDC_SCOPE:-openid profile}
         VITE_API_BASE_URL: http://localhost:8081
+        VITE_ENABLE_PLATFORM_BOOTSTRAP: "true"
     container_name: compilecare-web
     ports:
       - "127.0.0.1:8080:80"
