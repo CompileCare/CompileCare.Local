@@ -56,6 +56,16 @@ The launcher automatically removes the earlier standalone `compilecare-keycloak`
 
 The API runs in Development with migrations explicitly enabled by this local Compose stack. This opt-in must not be used in Staging or Production. Normal deployments retain the default migration behavior.
 
+## Local observability (optional)
+
+The API emits structured console logs, exposes /metrics and is instrumented for OpenTelemetry. To start the optional collector, Prometheus, Jaeger, Elasticsearch and Kibana services, use the [local observability runbook](engineering/local-observability.md):
+
+```bash
+docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml up --build -d
+```
+
+Dashboards: Kibana at http://localhost:5601 (logs), Prometheus at http://localhost:9090 (metrics), and Jaeger at http://localhost:16686 (traces). This overlay is local-only and must use synthetic data.
+
 ## Stop
 
 Use **Stop CompileCare.command** or **Stop CompileCare.bat**. PostgreSQL and Keycloak volumes are retained. To intentionally delete the local database and identity provider:
