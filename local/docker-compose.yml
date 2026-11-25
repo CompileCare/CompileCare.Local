@@ -11,6 +11,7 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME: http://keycloak.localhost:8082
       KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HEALTH_ENABLED: "true"
     ports:
       - "127.0.0.1:8082:8082"
