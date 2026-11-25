@@ -32,6 +32,19 @@ if [[ ! -f "$LOCAL/.env" ]]; then
   sed -i '' "s|^OIDC_SCOPE=.*|OIDC_SCOPE=$scope|" "$LOCAL/.env"
 fi
 
+# Generate a one-time local bootstrap secret when the example value is still present.
+if ! grep -q '^PLATFORM_BOOTSTRAP_SECRET=.' "$LOCAL/.env" || grep -q '^PLATFORM_BOOTSTRAP_SECRET=replace-with-' "$LOCAL/.env"; then
+  command -v openssl >/dev/null || fail "OpenSSL is required to generate the local bootstrap secret."
+  bootstrap_secret="$(openssl rand -hex 32)"
+  if grep -q '^PLATFORM_BOOTSTRAP_SECRET=' "$LOCAL/.env"; then
+    sed -i '' "s|^PLATFORM_BOOTSTRAP_SECRET=.*|PLATFORM_BOOTSTRAP_SECRET=$bootstrap_secret|" "$LOCAL/.env"
+  else
+    printf '\nPLATFORM_BOOTSTRAP_SECRET=%s\n' "$bootstrap_secret" >> "$LOCAL/.env"
+  fi
+  echo "One-time local platform bootstrap secret (enter it in the first-run workspace setup): $bootstrap_secret"
+  unset bootstrap_secret
+fi
+
 mkdir -p "$LOCAL/.secrets"
 CREDENTIALS="$LOCAL/.secrets/nuget-source-credentials"
 if [[ ! -s "$CREDENTIALS" ]]; then
