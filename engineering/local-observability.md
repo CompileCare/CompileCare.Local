@@ -13,7 +13,7 @@ docker compose --env-file local/.env \
   up --build -d
 ```
 
-The overlay leaves the standard local stack unchanged when it is not supplied. It configures the API OTLP exporter to use HTTP Protobuf on the collector HTTP receiver at otel-collector:4318 and configures the existing Serilog Elasticsearch sink.
+The overlay leaves the standard local stack unchanged when it is not supplied. It pins the OpenTelemetry Collector to 0.165.0, Jaeger to 2.23.0 and Prometheus to 3.16.0 so local telemetry behavior is reproducible. The API OTLP exporter uses HTTP Protobuf on the collector HTTP receiver at otel-collector:4318; the Collector uses the current `otlp_http` exporter and an explicit Jaeger traces endpoint (`http://jaeger:4318/v1/traces`). The overlay also configures the existing Serilog Elasticsearch sink.
 
 ## Where to view telemetry
 
