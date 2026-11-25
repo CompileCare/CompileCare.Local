@@ -1,0 +1,2 @@
+# CompileCare.Local
+Local run
