@@ -42,13 +42,13 @@ if (-not (Test-Path $CredentialFile)) {
   Set-Content -Path $CredentialFile -Value "Username=$username;Password=$token;ValidAuthenticationTypes=Basic" -NoNewline -Encoding ascii
   $token = $null
 }
-$existing = docker ps --format "{{.Names}}"
-if ($existing -contains "compilecare-keycloak") {
+$allContainers = docker ps -a --format "{{.Names}}"
+if ($allContainers -contains "compilecare-keycloak") {
   $project = docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' compilecare-keycloak
   if ($project -ne "compilecare-local") {
-    Write-Host "A temporary compilecare-keycloak container is already running."
-    Write-Host "Stop it with: docker stop compilecare-keycloak"
-    throw "Stop the temporary Keycloak container, then run the launcher again."
+    Write-Host "Removing the earlier standalone compilecare-keycloak container."
+    docker rm -f compilecare-keycloak *> $null
+    if ($LASTEXITCODE -ne 0) { throw "Could not remove the earlier temporary Keycloak container." }
   }
 }
 docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") up --build -d
