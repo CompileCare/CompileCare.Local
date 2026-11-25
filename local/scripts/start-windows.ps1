@@ -44,9 +44,12 @@ if (-not (Test-Path $CredentialFile)) {
 }
 $existing = docker ps --format "{{.Names}}"
 if ($existing -contains "compilecare-keycloak") {
-  Write-Host "A temporary compilecare-keycloak container is already running."
-  Write-Host "Stop it with: docker stop compilecare-keycloak"
-  throw "Stop the temporary Keycloak container, then run the launcher again."
+  $project = docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' compilecare-keycloak
+  if ($project -ne "compilecare-local") {
+    Write-Host "A temporary compilecare-keycloak container is already running."
+    Write-Host "Stop it with: docker stop compilecare-keycloak"
+    throw "Stop the temporary Keycloak container, then run the launcher again."
+  }
 }
 docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") up --build -d
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed. Inspect local logs." }
