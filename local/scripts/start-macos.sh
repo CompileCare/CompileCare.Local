@@ -32,6 +32,11 @@ if [[ ! -f "$LOCAL/.env" ]]; then
   sed -i '' "s|^OIDC_SCOPE=.*|OIDC_SCOPE=$scope|" "$LOCAL/.env"
 fi
 
+# Restore the intended profile claim scope after the earlier local diagnostic workaround.
+if grep -qx 'OIDC_SCOPE=openid' "$LOCAL/.env"; then
+  sed -i '' 's|^OIDC_SCOPE=openid$|OIDC_SCOPE=openid profile|' "$LOCAL/.env"
+fi
+
 # Generate a one-time local bootstrap secret when the example value is still present.
 if ! grep -q '^PLATFORM_BOOTSTRAP_SECRET=.' "$LOCAL/.env" || grep -q '^PLATFORM_BOOTSTRAP_SECRET=replace-with-' "$LOCAL/.env"; then
   command -v openssl >/dev/null || fail "OpenSSL is required to generate the local bootstrap secret."
