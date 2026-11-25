@@ -22,4 +22,7 @@ jobs:
           if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
       - name: Validate Docker Compose configuration
         run: |
-          docker compose --env-file local/.env.example -f local/docker-compose.yml config --quiet
+          mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
+          printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
+          COMPILECARE_API_PATH="$GITHUB_WORKSPACE" COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml config --quiet
+          rm -rf local/.secrets
