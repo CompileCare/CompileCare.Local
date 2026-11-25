@@ -48,9 +48,12 @@ chmod 600 "$CREDENTIALS"
 # The earlier manual Keycloak container used the same host port. Stop that
 # temporary container once before the Compose-managed Keycloak is started.
 if docker ps --format '{{.Names}}' | grep -qx 'compilecare-keycloak'; then
-  echo "A temporary compilecare-keycloak container is already running."
-  echo "Stop it with: docker stop compilecare-keycloak"
-  fail "Stop the temporary Keycloak container, then run the launcher again."
+  project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' compilecare-keycloak 2>/dev/null || true)"
+  if [[ "$project" != "compilecare-local" ]]; then
+    echo "A temporary compilecare-keycloak container is already running."
+    echo "Stop it with: docker stop compilecare-keycloak"
+    fail "Stop the temporary Keycloak container, then run the launcher again."
+  fi
 fi
 
 echo "Building and starting CompileCare (including local Keycloak)..."
