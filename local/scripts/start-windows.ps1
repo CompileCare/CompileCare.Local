@@ -37,7 +37,17 @@ if (-not $bootstrapLine -or $bootstrapLine -match '^PLATFORM_BOOTSTRAP_SECRET=re
   [System.Security.Cryptography.RandomNumberGenerator]::Fill($randomBytes)
   $bootstrapSecret = [Convert]::ToHexString($randomBytes).ToLowerInvariant()
   $envContent = Get-Content $EnvFile -Raw
-  if ($envContent -match '(?m)^PLATFORM_BOOTSTRAP_SECRET=.* New-Item -ItemType Directory -Force -Path $Secrets | Out-Null
+  if ($envContent -match '(?m)^PLATFORM_BOOTSTRAP_SECRET=.*$') {
+    $envContent = $envContent -replace '(?m)^PLATFORM_BOOTSTRAP_SECRET=.*$', "PLATFORM_BOOTSTRAP_SECRET=$bootstrapSecret"
+    Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+  } else {
+    Add-Content -Path $EnvFile -Value "`nPLATFORM_BOOTSTRAP_SECRET=$bootstrapSecret"
+  }
+  Write-Host "One-time local platform bootstrap secret (enter it in the first-run workspace setup): $bootstrapSecret"
+  $bootstrapSecret = $null
+}
+$Secrets = Join-Path $Local ".secrets"
+New-Item -ItemType Directory -Force -Path $Secrets | Out-Null
 $CredentialFile = Join-Path $Secrets "nuget-source-credentials"
 if (-not (Test-Path $CredentialFile)) {
   $username = Read-Host "GitHub username [Shatru-compile]"; if ([string]::IsNullOrWhiteSpace($username)) { $username = "Shatru-compile" }
@@ -51,7 +61,7 @@ if (-not (Test-Path $CredentialFile)) {
 $allContainers = docker ps -a --format "{{.Names}}"
 if ($allContainers -contains "compilecare-keycloak") {
   $containerInfo = docker inspect compilecare-keycloak | ConvertFrom-Json
-  $project = $containerInfo[0].Config.Labels.'com.docker.compose.project'
+  $project = $containerInfo[0].Config.Labels["com.docker.compose.project"]
   if ($project -ne "compilecare-local") {
     Write-Host "Removing the earlier standalone compilecare-keycloak container."
     docker rm -f compilecare-keycloak *> $null
