@@ -50,7 +50,7 @@ services:
 
   api:
     build:
-      context: ${COMPILECARE_API_PATH:-../CompileCare.Api}
+      context: ${COMPILECARE_API_PATH:-../../CompileCare.Api}
       dockerfile: Dockerfile
       secrets:
         - nuget_credentials
@@ -62,6 +62,7 @@ services:
       Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8082/realms/compilecare}
       Authentication__Audience: ${OIDC_AUDIENCE:-compilecare-api}
       Authentication__RequireHttpsMetadata: ${OIDC_REQUIRE_HTTPS_METADATA:-false}
+      PlatformBootstrap__Secret: ${PLATFORM_BOOTSTRAP_SECRET:-}
       Database__ApplyMigrationsOnStartup: "true"
       Cors__AllowedOrigins__0: http://localhost:8080
       OpenTelemetry__ServiceName: CompileCare.Api
@@ -82,7 +83,7 @@ services:
 
   web:
     build:
-      context: ${COMPILECARE_WEB_PATH:-../CompileCare.Web}
+      context: ${COMPILECARE_WEB_PATH:-../../CompileCare.Web}
       dockerfile: Dockerfile
       args:
         VITE_OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://keycloak.localhost:8082/realms/compilecare}
