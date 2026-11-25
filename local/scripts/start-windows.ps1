@@ -43,8 +43,10 @@ if ($envLines -contains "OIDC_SCOPE=openid") {
 $bootstrapLine = Get-Content $EnvFile | Where-Object { $_ -match '^PLATFORM_BOOTSTRAP_SECRET=' } | Select-Object -First 1
 if (-not $bootstrapLine -or $bootstrapLine -match '^PLATFORM_BOOTSTRAP_SECRET=replace-with-') {
   $randomBytes = New-Object byte[] 32
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($randomBytes)
-  $bootstrapSecret = [Convert]::ToHexString($randomBytes).ToLowerInvariant()
+  $randomGenerator = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+  $randomGenerator.GetBytes($randomBytes)
+  $randomGenerator.Dispose()
+  $bootstrapSecret = [BitConverter]::ToString($randomBytes).Replace("-", "").ToLowerInvariant()
   $envContent = Get-Content $EnvFile -Raw
   if ($envContent -match '(?m)^PLATFORM_BOOTSTRAP_SECRET=.*$') {
     $envContent = $envContent -replace '(?m)^PLATFORM_BOOTSTRAP_SECRET=.*$', "PLATFORM_BOOTSTRAP_SECRET=$bootstrapSecret"
