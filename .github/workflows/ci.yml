@@ -37,6 +37,13 @@ jobs:
           assert mapper["config"]["access.token.claim"] == "true"
           assert mapper["config"]["id.token.claim"] == "false"
           assert "compilecare-api-audience" in client["defaultClientScopes"]
+          assert "profile" in client["defaultClientScopes"]
+          assert "email" in client["defaultClientScopes"]
+          profile = next(item for item in realm["clientScopes"] if item["name"] == "profile")
+          email = next(item for item in realm["clientScopes"] if item["name"] == "email")
+          assert any(mapper["config"].get("claim.name") == "given_name" for mapper in profile["protocolMappers"])
+          assert any(mapper["config"].get("claim.name") == "email" for mapper in email["protocolMappers"])
+          assert all(name in {scope["name"] for scope in realm["clientScopes"]} for name in client["defaultClientScopes"])
           PY
       - name: Smoke-test Keycloak realm import in Docker
         run: |
