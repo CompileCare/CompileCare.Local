@@ -123,6 +123,12 @@ jobs:
           print("Keycloak profile/email claims and default API audience scope verified.")
           PY
           docker rm -f compilecare-keycloak-ci
+      - name: Validate OpenTelemetry Collector configuration
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/local/observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro" \
+            otel/opentelemetry-collector:0.165.0 \
+            validate --config=/etc/otel-collector-config.yaml
       - name: Validate Docker Compose configuration
         run: |
           mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
