@@ -1,6 +1,35 @@
 name: compilecare-local
 
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2.5
+    container_name: compilecare-keycloak
+    command: ["start-dev", "--http-port=8082", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in local/.env}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: http://keycloak.localhost:8082
+      KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8082:8082"
+    volumes:
+      - ./keycloak/compilecare-realm.json:/opt/keycloak/data/import/compilecare-realm.json:ro
+      - compilecare-keycloak:/opt/keycloak/data
+    networks:
+      default:
+        aliases:
+          - keycloak.localhost
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8082'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
+    restart: unless-stopped
+
   postgres:
     image: postgres:17-alpine
     container_name: compilecare-postgres
@@ -30,9 +59,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__CompileCare: Host=postgres;Port=5432;Database=compilecare;Username=compilecare;Password=${POSTGRES_PASSWORD:-compilecare-local-only}
-      Authentication__Authority: ${OIDC_AUTHORITY:?Set OIDC_AUTHORITY in local/.env}
+      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8082/realms/compilecare}
       Authentication__Audience: ${OIDC_AUDIENCE:-compilecare-api}
-      Authentication__RequireHttpsMetadata: ${OIDC_REQUIRE_HTTPS_METADATA:-true}
+      Authentication__RequireHttpsMetadata: ${OIDC_REQUIRE_HTTPS_METADATA:-false}
       Database__ApplyMigrationsOnStartup: "true"
       Cors__AllowedOrigins__0: http://localhost:8080
       OpenTelemetry__ServiceName: CompileCare.Api
@@ -40,6 +69,8 @@ services:
       - "127.0.0.1:8081:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
@@ -54,8 +85,8 @@ services:
       context: ${COMPILECARE_WEB_PATH:-../CompileCare.Web}
       dockerfile: Dockerfile
       args:
-        VITE_OIDC_AUTHORITY: ${OIDC_AUTHORITY}
-        VITE_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+        VITE_OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://keycloak.localhost:8082/realms/compilecare}
+        VITE_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-compilecare-web}
         VITE_OIDC_REDIRECT_URI: http://localhost:8080/auth/callback
         VITE_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:8080
         VITE_OIDC_SCOPE: ${OIDC_SCOPE:-openid profile}
@@ -69,6 +100,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  compilecare-keycloak:
   compilecare-postgres:
 
 secrets:

@@ -18,8 +18,8 @@ export COMPILECARE_API_PATH="$API" COMPILECARE_WEB_PATH="$WEB"
 
 if [[ ! -f "$LOCAL/.env" ]]; then
   cp "$LOCAL/.env.example" "$LOCAL/.env"
-  read -r -p "Development OIDC Authority URL: " authority
-  [[ -n "$authority" ]] || fail "OIDC authority is required."
+  read -r -p "Development OIDC Authority URL [http://keycloak.localhost:8082/realms/compilecare]: " authority
+  authority="${authority:-http://keycloak.localhost:8082/realms/compilecare}"
   read -r -p "API Audience [compilecare-api]: " audience
   audience="${audience:-compilecare-api}"
   read -r -p "Web Client ID [compilecare-web]: " client
@@ -45,11 +45,23 @@ if [[ ! -s "$CREDENTIALS" ]]; then
 fi
 chmod 600 "$CREDENTIALS"
 
-echo "Building and starting CompileCare..."
+# The earlier manual Keycloak container used the same host port. Stop that
+# temporary container once before the Compose-managed Keycloak is started.
+if docker ps --format '{{.Names}}' | grep -qx 'compilecare-keycloak'; then
+  project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' compilecare-keycloak 2>/dev/null || true)"
+  if [[ "$project" != "compilecare-local" ]]; then
+    echo "A temporary compilecare-keycloak container is already running."
+    echo "Stop it with: docker stop compilecare-keycloak"
+    fail "Stop the temporary Keycloak container, then run the launcher again."
+  fi
+fi
+
+echo "Building and starting CompileCare (including local Keycloak)..."
 docker compose --env-file "$LOCAL/.env" -f "$LOCAL/docker-compose.yml" up --build -d || fail "Compose failed. Inspect: docker compose --env-file local/.env -f local/docker-compose.yml logs"
-for i in {1..60}; do
+for i in {1..90}; do
   if curl -fsS http://localhost:8081/ >/dev/null 2>&1 && curl -fsS http://localhost:8080/ >/dev/null 2>&1; then
     echo "CompileCare is running at http://localhost:8080"
+    echo "Local identity provider: http://keycloak.localhost:8082"
     open http://localhost:8080
     read -r -p "Press Enter to close..."
     exit 0

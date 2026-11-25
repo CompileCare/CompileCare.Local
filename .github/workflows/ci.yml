@@ -20,6 +20,61 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("local/scripts/start-windows.ps1", [ref]$tokens, [ref]$errors) > $null
           if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+      - name: Validate Keycloak realm import
+        run: |
+          python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
+          python - <<'PY'
+          import json
+          with open("local/keycloak/compilecare-realm.json", encoding="utf-8") as file:
+              realm = json.load(file)
+          assert realm["realm"] == "compilecare"
+          client = next(item for item in realm["clients"] if item["clientId"] == "compilecare-web")
+          assert client["publicClient"] is True
+          assert client["attributes"]["pkce.code.challenge.method"] == "S256"
+          scope = next(item for item in realm["clientScopes"] if item["name"] == "compilecare-api-audience")
+          mapper = next(item for item in scope["protocolMappers"] if item["protocolMapper"] == "oidc-audience-mapper")
+          assert mapper["config"]["included.custom.audience"] == "compilecare-api"
+          assert mapper["config"]["access.token.claim"] == "true"
+          assert mapper["config"]["id.token.claim"] == "false"
+          assert "compilecare-api-audience" in client["defaultClientScopes"]
+          PY
+      - name: Smoke-test Keycloak realm import in Docker
+        run: |
+          docker run -d --name compilecare-keycloak-ci \
+            -p 127.0.0.1:8082:8082 \
+            -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+            -e KC_BOOTSTRAP_ADMIN_PASSWORD=LocalOnly-CI-Password-123! \
+            -e KC_HTTP_ENABLED=true \
+            -e KC_HOSTNAME=http://keycloak.localhost:8082 \
+            -e KC_HOSTNAME_STRICT=true \
+            -e KC_HOSTNAME_STRICT_HTTPS=false \
+            -e KC_HEALTH_ENABLED=true \
+            -v "$GITHUB_WORKSPACE/local/keycloak/compilecare-realm.json:/opt/keycloak/data/import/compilecare-realm.json:ro" \
+            quay.io/keycloak/keycloak:26.2.5 start-dev --http-port=8082 --import-realm
+          ready=false
+          for attempt in $(seq 1 90); do
+            if curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+              http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration \
+              -o "$RUNNER_TEMP/compilecare-oidc.json"; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            docker logs compilecare-keycloak-ci
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          with open(__import__("os").path.join(__import__("os").environ["RUNNER_TEMP"], "compilecare-oidc.json"), encoding="utf-8") as file:
+              discovery = json.load(file)
+          assert discovery["issuer"] == "http://keycloak.localhost:8082/realms/compilecare", discovery["issuer"]
+          assert discovery["authorization_endpoint"].endswith("/protocol/openid-connect/auth")
+          assert discovery["jwks_uri"].endswith("/protocol/openid-connect/certs")
+          print("Keycloak realm import and OIDC discovery verified.")
+          PY
+          docker rm -f compilecare-keycloak-ci
       - name: Validate Docker Compose configuration
         run: |
           mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
