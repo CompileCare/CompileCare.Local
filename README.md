@@ -41,7 +41,7 @@ docker compose --env-file local/.env -f local/docker-compose.yml down
 docker volume rm compilecare-local_compilecare-keycloak
 ```
 
-The launcher prompts if the earlier manually started `compilecare-keycloak` container is still running, because that temporary container occupies port 8082. Stop it once with `docker stop compilecare-keycloak`, then run the launcher again. The Compose-managed service will use that container name.
+The launcher automatically removes the earlier standalone `compilecare-keycloak` container (including a stopped container) before starting the Compose-managed service. It does not remove the Compose-managed container. This avoids a container-name conflict on port 8082 during the migration from the temporary manual setup.
 
 ## Local endpoints
 
