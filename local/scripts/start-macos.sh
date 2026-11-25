@@ -75,6 +75,8 @@ fi
 
 echo "Building and starting CompileCare (including local Keycloak)..."
 docker compose --env-file "$LOCAL/.env" -f "$LOCAL/docker-compose.yml" up --build -d || fail "Compose failed. Inspect: docker compose --env-file local/.env -f local/docker-compose.yml logs"
+command -v python3 >/dev/null || fail "Python 3 is required to reconcile the local Keycloak realm scopes."
+python3 "$LOCAL/scripts/configure-keycloak.py" "$LOCAL/.env" --base-url http://keycloak.localhost:8082 || fail "Could not reconcile local Keycloak OIDC scopes. Inspect the Keycloak admin credentials and logs."
 for i in {1..90}; do
   if curl -fsS http://localhost:8081/ >/dev/null 2>&1 && curl -fsS http://localhost:8080/ >/dev/null 2>&1; then
     echo "CompileCare is running at http://localhost:8080"
