@@ -1,0 +1,28 @@
+name: Local tooling validation
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate macOS shell script
+        run: bash -n local/scripts/start-macos.sh
+      - name: Validate Windows PowerShell script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("local/scripts/start-windows.ps1", [ref]$tokens, [ref]$errors) > $null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+      - name: Validate Docker Compose configuration
+        run: |
+          mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
+          printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
+          COMPILECARE_API_PATH="$GITHUB_WORKSPACE" COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml config --quiet
+          rm -rf local/.secrets

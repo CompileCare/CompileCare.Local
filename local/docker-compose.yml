@@ -1,0 +1,76 @@
+name: compilecare-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: compilecare-postgres
+    environment:
+      POSTGRES_DB: compilecare
+      POSTGRES_USER: compilecare
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-compilecare-local-only}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - compilecare-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compilecare -d compilecare"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ${COMPILECARE_API_PATH:-../CompileCare.Api}
+      dockerfile: Dockerfile
+      secrets:
+        - nuget_credentials
+    container_name: compilecare-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__CompileCare: Host=postgres;Port=5432;Database=compilecare;Username=compilecare;Password=${POSTGRES_PASSWORD:-compilecare-local-only}
+      Authentication__Authority: ${OIDC_AUTHORITY:?Set OIDC_AUTHORITY in local/.env}
+      Authentication__Audience: ${OIDC_AUDIENCE:-compilecare-api}
+      Authentication__RequireHttpsMetadata: ${OIDC_REQUIRE_HTTPS_METADATA:-true}
+      Database__ApplyMigrationsOnStartup: "true"
+      Cors__AllowedOrigins__0: http://localhost:8080
+      OpenTelemetry__ServiceName: CompileCare.Api
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ${COMPILECARE_WEB_PATH:-../CompileCare.Web}
+      dockerfile: Dockerfile
+      args:
+        VITE_OIDC_AUTHORITY: ${OIDC_AUTHORITY}
+        VITE_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+        VITE_OIDC_REDIRECT_URI: http://localhost:8080/auth/callback
+        VITE_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:8080
+        VITE_OIDC_SCOPE: ${OIDC_SCOPE:-openid profile}
+        VITE_API_BASE_URL: http://localhost:8081
+    container_name: compilecare-web
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  compilecare-postgres:
+
+secrets:
+  nuget_credentials:
+    file: .secrets/nuget-source-credentials
