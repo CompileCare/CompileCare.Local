@@ -19,8 +19,8 @@ $env:COMPILECARE_WEB_PATH = $Web
 $EnvFile = Join-Path $Local ".env"
 if (-not (Test-Path $EnvFile)) {
   Copy-Item (Join-Path $Local ".env.example") $EnvFile
-  $authority = Read-Host "Development OIDC Authority URL"
-  if ([string]::IsNullOrWhiteSpace($authority)) { throw "OIDC authority required." }
+  $authority = Read-Host "Development OIDC Authority URL [http://keycloak.localhost:8082/realms/compilecare]"
+  if ([string]::IsNullOrWhiteSpace($authority)) { $authority = "http://keycloak.localhost:8082/realms/compilecare" }
   $audience = Read-Host "API Audience [compilecare-api]"; if ([string]::IsNullOrWhiteSpace($audience)) { $audience = "compilecare-api" }
   $client = Read-Host "Web Client ID [compilecare-web]"; if ([string]::IsNullOrWhiteSpace($client)) { $client = "compilecare-web" }
   $scope = Read-Host "OIDC Scope [openid profile]"; if ([string]::IsNullOrWhiteSpace($scope)) { $scope = "openid profile" }
@@ -42,15 +42,22 @@ if (-not (Test-Path $CredentialFile)) {
   Set-Content -Path $CredentialFile -Value "Username=$username;Password=$token;ValidAuthenticationTypes=Basic" -NoNewline -Encoding ascii
   $token = $null
 }
+$existing = docker ps --format "{{.Names}}"
+if ($existing -contains "compilecare-keycloak") {
+  Write-Host "A temporary compilecare-keycloak container is already running."
+  Write-Host "Stop it with: docker stop compilecare-keycloak"
+  throw "Stop the temporary Keycloak container, then run the launcher again."
+}
 docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") up --build -d
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed. Inspect local logs." }
-for ($i=0; $i -lt 60; $i++) {
+for ($i=0; $i -lt 90; $i++) {
   try {
     Invoke-WebRequest http://localhost:8081/ -UseBasicParsing -TimeoutSec 2 | Out-Null
     Invoke-WebRequest http://localhost:8080/ -UseBasicParsing -TimeoutSec 2 | Out-Null
     Start-Process "http://localhost:8080"
-    Write-Host "CompileCare is running."; exit 0
+    Write-Host "CompileCare is running. Local identity provider: http://keycloak.localhost:8082"
+    exit 0
   } catch { Start-Sleep -Seconds 2 }
 }
 docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") ps
-throw "Startup timeout. Inspect Docker Compose logs."
+throw "Startup timeout. Inspect local logs."
