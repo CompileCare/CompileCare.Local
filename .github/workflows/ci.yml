@@ -20,6 +20,24 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("local/scripts/start-windows.ps1", [ref]$tokens, [ref]$errors) > $null
           if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+      - name: Validate Keycloak realm import
+        run: |
+          python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
+          python - <<'PY'
+          import json
+          with open("local/keycloak/compilecare-realm.json", encoding="utf-8") as file:
+              realm = json.load(file)
+          assert realm["realm"] == "compilecare"
+          client = next(item for item in realm["clients"] if item["clientId"] == "compilecare-web")
+          assert client["publicClient"] is True
+          assert client["attributes"]["pkce.code.challenge.method"] == "S256"
+          scope = next(item for item in realm["clientScopes"] if item["name"] == "compilecare-api-audience")
+          mapper = next(item for item in scope["protocolMappers"] if item["protocolMapper"] == "oidc-audience-mapper")
+          assert mapper["config"]["included.custom.audience"] == "compilecare-api"
+          assert mapper["config"]["access.token.claim"] == "true"
+          assert mapper["config"]["id.token.claim"] == "false"
+          assert "compilecare-api-audience" in client["defaultClientScopes"]
+          PY
       - name: Validate Docker Compose configuration
         run: |
           mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
