@@ -86,6 +86,14 @@ if ($allContainers -contains "compilecare-keycloak") {
 
 docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") up --build -d
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed. Inspect local logs." }
+if (Get-Command py -ErrorAction SilentlyContinue) {
+  py -3 (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+  python (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
+} else {
+  throw "Python 3 is required to reconcile local Keycloak scopes. Install Python 3 and retry."
+}
+if ($LASTEXITCODE -ne 0) { throw "Could not reconcile local Keycloak OIDC scopes. Check the admin credentials and Keycloak logs." }
 for ($i=0; $i -lt 90; $i++) {
   try {
     Invoke-WebRequest http://localhost:8081/ -UseBasicParsing -TimeoutSec 2 | Out-Null
