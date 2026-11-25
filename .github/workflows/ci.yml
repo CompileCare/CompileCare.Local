@@ -22,6 +22,7 @@ jobs:
           if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
       - name: Validate Keycloak realm import
         run: |
+          python -m py_compile local/scripts/configure-keycloak.py
           python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
           python - <<'PY'
           import json
@@ -37,6 +38,13 @@ jobs:
           assert mapper["config"]["access.token.claim"] == "true"
           assert mapper["config"]["id.token.claim"] == "false"
           assert "compilecare-api-audience" in client["defaultClientScopes"]
+          assert "profile" in client["defaultClientScopes"]
+          assert "email" in client["defaultClientScopes"]
+          profile = next(item for item in realm["clientScopes"] if item["name"] == "profile")
+          email = next(item for item in realm["clientScopes"] if item["name"] == "email")
+          assert any(mapper["config"].get("claim.name") == "given_name" for mapper in profile["protocolMappers"])
+          assert any(mapper["config"].get("claim.name") == "email" for mapper in email["protocolMappers"])
+          assert all(name in {scope["name"] for scope in realm["clientScopes"]} for name in client["defaultClientScopes"])
           PY
       - name: Smoke-test Keycloak realm import in Docker
         run: |
@@ -73,6 +81,46 @@ jobs:
           assert discovery["authorization_endpoint"].endswith("/protocol/openid-connect/auth")
           assert discovery["jwks_uri"].endswith("/protocol/openid-connect/certs")
           print("Keycloak realm import and OIDC discovery verified.")
+          PY
+          echo "127.0.0.1 keycloak.localhost" | sudo tee -a /etc/hosts > /dev/null
+          KEYCLOAK_ADMIN_PASSWORD=LocalOnly-CI-Password-123! python3 local/scripts/configure-keycloak.py local/.env.example --base-url http://keycloak.localhost:8082
+          admin_token="$(curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -d grant_type=password -d client_id=admin-cli \
+            -d username=admin -d password=LocalOnly-CI-Password-123! \
+            http://keycloak.localhost:8082/realms/master/protocol/openid-connect/token | jq -r .access_token)"
+          export KEYCLOAK_ADMIN_TOKEN="$admin_token"
+          curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -H "Authorization: Bearer $admin_token" \
+            http://keycloak.localhost:8082/admin/realms/compilecare/client-scopes \
+            -o "$RUNNER_TEMP/compilecare-client-scopes.json"
+          curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -H "Authorization: Bearer $admin_token" \
+            "http://keycloak.localhost:8082/admin/realms/compilecare/clients?clientId=compilecare-web" \
+            -o "$RUNNER_TEMP/compilecare-web-client.json"
+          python - <<'PY'
+          import json, os
+          root = os.environ["RUNNER_TEMP"]
+          with open(os.path.join(root, "compilecare-client-scopes.json"), encoding="utf-8") as f:
+              scopes = {item["name"]: item for item in json.load(f)}
+          assert "profile" in scopes and "email" in scopes and "compilecare-api-audience" in scopes
+          profile_claims = {m.get("config", {}).get("claim.name") for m in scopes["profile"].get("protocolMappers", [])}
+          email_claims = {m.get("config", {}).get("claim.name") for m in scopes["email"].get("protocolMappers", [])}
+          assert "given_name" in profile_claims and "family_name" in profile_claims
+          assert "email" in email_claims
+          with open(os.path.join(root, "compilecare-web-client.json"), encoding="utf-8") as f:
+              clients = json.load(f)
+          assert len(clients) == 1, clients
+          client_id = clients[0]["id"]
+          import subprocess
+          defaults = subprocess.check_output([
+              "curl", "--silent", "--show-error", "--fail",
+              "--resolve", "keycloak.localhost:8082:127.0.0.1",
+              "-H", "Authorization: Bearer " + os.environ["KEYCLOAK_ADMIN_TOKEN"],
+              f"http://keycloak.localhost:8082/admin/realms/compilecare/clients/{client_id}/default-client-scopes"
+          ], text=True)
+          default_names = {item["name"] for item in json.loads(defaults)}
+          assert {"profile", "email", "compilecare-api-audience"}.issubset(default_names), default_names
+          print("Keycloak profile/email claims and default API audience scope verified.")
           PY
           docker rm -f compilecare-keycloak-ci
       - name: Validate Docker Compose configuration

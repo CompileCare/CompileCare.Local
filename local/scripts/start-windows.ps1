@@ -31,7 +31,35 @@ if (-not (Test-Path $EnvFile)) {
   $content = $content -replace '(?m)^OIDC_SCOPE=.*$', "OIDC_SCOPE=$scope"
   Set-Content -Path $EnvFile -Value $content -NoNewline -Encoding ascii
 }
-$Secrets = Join-Path $Local ".secrets"; New-Item -ItemType Directory -Force -Path $Secrets | Out-Null
+
+# Restore the intended profile claim scope after the earlier local diagnostic workaround.
+$envLines = Get-Content $EnvFile
+if ($envLines -contains "OIDC_SCOPE=openid") {
+  $envContent = Get-Content $EnvFile -Raw
+  $envContent = $envContent -replace '(?m)^OIDC_SCOPE=openid$', 'OIDC_SCOPE=openid profile'
+  Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+}
+
+$bootstrapLine = Get-Content $EnvFile | Where-Object { $_ -match '^PLATFORM_BOOTSTRAP_SECRET=' } | Select-Object -First 1
+if (-not $bootstrapLine -or $bootstrapLine -match '^PLATFORM_BOOTSTRAP_SECRET=replace-with-') {
+  $randomBytes = New-Object byte[] 32
+  $randomGenerator = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+  $randomGenerator.GetBytes($randomBytes)
+  $randomGenerator.Dispose()
+  $bootstrapSecret = [BitConverter]::ToString($randomBytes).Replace("-", "").ToLowerInvariant()
+  $envContent = Get-Content $EnvFile -Raw
+  if ($envContent -match '(?m)^PLATFORM_BOOTSTRAP_SECRET=.*$') {
+    $envContent = $envContent -replace '(?m)^PLATFORM_BOOTSTRAP_SECRET=.*$', "PLATFORM_BOOTSTRAP_SECRET=$bootstrapSecret"
+    Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+  } else {
+    Add-Content -Path $EnvFile -Value "`nPLATFORM_BOOTSTRAP_SECRET=$bootstrapSecret"
+  }
+  Write-Host "One-time local platform bootstrap secret (enter it in the first-run workspace setup): $bootstrapSecret"
+  $bootstrapSecret = $null
+}
+
+$Secrets = Join-Path $Local ".secrets"
+New-Item -ItemType Directory -Force -Path $Secrets | Out-Null
 $CredentialFile = Join-Path $Secrets "nuget-source-credentials"
 if (-not (Test-Path $CredentialFile)) {
   $username = Read-Host "GitHub username [Shatru-compile]"; if ([string]::IsNullOrWhiteSpace($username)) { $username = "Shatru-compile" }
@@ -42,17 +70,30 @@ if (-not (Test-Path $CredentialFile)) {
   Set-Content -Path $CredentialFile -Value "Username=$username;Password=$token;ValidAuthenticationTypes=Basic" -NoNewline -Encoding ascii
   $token = $null
 }
+
 $allContainers = docker ps -a --format "{{.Names}}"
 if ($allContainers -contains "compilecare-keycloak") {
-  $project = docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' compilecare-keycloak
+  $containerInfo = docker inspect compilecare-keycloak | ConvertFrom-Json
+  $labels = $containerInfo[0].Config.Labels
+  $projectProperty = $labels.PSObject.Properties | Where-Object { $_.Name -eq "com.docker.compose.project" } | Select-Object -First 1
+  $project = if ($projectProperty) { $projectProperty.Value } else { "" }
   if ($project -ne "compilecare-local") {
     Write-Host "Removing the earlier standalone compilecare-keycloak container."
     docker rm -f compilecare-keycloak *> $null
     if ($LASTEXITCODE -ne 0) { throw "Could not remove the earlier temporary Keycloak container." }
   }
 }
+
 docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") up --build -d
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed. Inspect local logs." }
+if (Get-Command py -ErrorAction SilentlyContinue) {
+  py -3 (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+  python (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
+} else {
+  throw "Python 3 is required to reconcile local Keycloak scopes. Install Python 3 and retry."
+}
+if ($LASTEXITCODE -ne 0) { throw "Could not reconcile local Keycloak OIDC scopes. Check the admin credentials and Keycloak logs." }
 for ($i=0; $i -lt 90; $i++) {
   try {
     Invoke-WebRequest http://localhost:8081/ -UseBasicParsing -TimeoutSec 2 | Out-Null

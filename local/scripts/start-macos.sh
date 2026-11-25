@@ -32,6 +32,24 @@ if [[ ! -f "$LOCAL/.env" ]]; then
   sed -i '' "s|^OIDC_SCOPE=.*|OIDC_SCOPE=$scope|" "$LOCAL/.env"
 fi
 
+# Restore the intended profile claim scope after the earlier local diagnostic workaround.
+if grep -qx 'OIDC_SCOPE=openid' "$LOCAL/.env"; then
+  sed -i '' 's|^OIDC_SCOPE=openid$|OIDC_SCOPE=openid profile|' "$LOCAL/.env"
+fi
+
+# Generate a one-time local bootstrap secret when the example value is still present.
+if ! grep -q '^PLATFORM_BOOTSTRAP_SECRET=.' "$LOCAL/.env" || grep -q '^PLATFORM_BOOTSTRAP_SECRET=replace-with-' "$LOCAL/.env"; then
+  command -v openssl >/dev/null || fail "OpenSSL is required to generate the local bootstrap secret."
+  bootstrap_secret="$(openssl rand -hex 32)"
+  if grep -q '^PLATFORM_BOOTSTRAP_SECRET=' "$LOCAL/.env"; then
+    sed -i '' "s|^PLATFORM_BOOTSTRAP_SECRET=.*|PLATFORM_BOOTSTRAP_SECRET=$bootstrap_secret|" "$LOCAL/.env"
+  else
+    printf '\nPLATFORM_BOOTSTRAP_SECRET=%s\n' "$bootstrap_secret" >> "$LOCAL/.env"
+  fi
+  echo "One-time local platform bootstrap secret (enter it in the first-run workspace setup): $bootstrap_secret"
+  unset bootstrap_secret
+fi
+
 mkdir -p "$LOCAL/.secrets"
 CREDENTIALS="$LOCAL/.secrets/nuget-source-credentials"
 if [[ ! -s "$CREDENTIALS" ]]; then
@@ -57,6 +75,8 @@ fi
 
 echo "Building and starting CompileCare (including local Keycloak)..."
 docker compose --env-file "$LOCAL/.env" -f "$LOCAL/docker-compose.yml" up --build -d || fail "Compose failed. Inspect: docker compose --env-file local/.env -f local/docker-compose.yml logs"
+command -v python3 >/dev/null || fail "Python 3 is required to reconcile the local Keycloak realm scopes."
+python3 "$LOCAL/scripts/configure-keycloak.py" "$LOCAL/.env" --base-url http://keycloak.localhost:8082 || fail "Could not reconcile local Keycloak OIDC scopes. Inspect the Keycloak admin credentials and logs."
 for i in {1..90}; do
   if curl -fsS http://localhost:8081/ >/dev/null 2>&1 && curl -fsS http://localhost:8080/ >/dev/null 2>&1; then
     echo "CompileCare is running at http://localhost:8080"
