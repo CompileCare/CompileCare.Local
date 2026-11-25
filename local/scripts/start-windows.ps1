@@ -50,7 +50,8 @@ if (-not (Test-Path $CredentialFile)) {
 }
 $allContainers = docker ps -a --format "{{.Names}}"
 if ($allContainers -contains "compilecare-keycloak") {
-  $project = docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' compilecare-keycloak
+  $format = '{{ index .Config.Labels "com.docker.compose.project" }}'
+  $project = docker inspect --format $format compilecare-keycloak
   if ($project -ne "compilecare-local") {
     Write-Host "Removing the earlier standalone compilecare-keycloak container."
     docker rm -f compilecare-keycloak *> $null
