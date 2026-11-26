@@ -39,6 +39,12 @@ jobs:
           assert "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in local/.env}" in compose
           assert "POSTGRES_PASSWORD:-compilecare-local-only" not in compose
           assert "Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in local/.env}" in compose
+          assert "CSP_CONNECT_SRC=http://localhost:8081 http://keycloak.localhost:8082" in env
+          assert "CSP_FRAME_SRC=http://keycloak.localhost:8082" in env
+          assert "ALLOW_INSECURE_CSP_ORIGINS=true" in env
+          assert "CSP_CONNECT_SRC: ${CSP_CONNECT_SRC:-http://localhost:8081 http://keycloak.localhost:8082}" in compose
+          assert "CSP_FRAME_SRC: ${CSP_FRAME_SRC:-http://keycloak.localhost:8082}" in compose
+          assert 'ALLOW_INSECURE_CSP_ORIGINS: "true"' in compose
           mac = Path("local/scripts/start-macos.sh").read_text(encoding="utf-8")
           windows = Path("local/scripts/start-windows.ps1").read_text(encoding="utf-8")
           assert 'NEW_LOCAL_ENV=true' in mac and '"$NEW_LOCAL_ENV" == "true"' in mac

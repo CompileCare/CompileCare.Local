@@ -29,6 +29,22 @@ echo "  ✓ PostgreSQL accepts local readiness probes"
 
 echo "Checking Web and API..."
 curl_local http://localhost:8080/ >/dev/null
+web_headers=$(curl --fail --silent --show-error --head http://localhost:8080/)
+for expected in \
+  "Content-Security-Policy: default-src 'self';" \
+  "connect-src 'self' http://localhost:8081 http://keycloak.localhost:8082;" \
+  "frame-src 'self' http://keycloak.localhost:8082;"; do
+  if ! grep -Fqi "$expected" <<<"$web_headers"; then
+    echo "Missing or incorrect Web CSP response directive: $expected" >&2
+    echo "$web_headers" >&2
+    exit 1
+  fi
+done
+if grep -Fqi "connect-src 'self' *" <<<"$web_headers"; then
+  echo "Wildcard CSP connect-src is not permitted." >&2
+  exit 1
+fi
+echo "  ✓ Web enforces the configured CSP for local API and Keycloak origins"
 api_response=$(curl_local http://localhost:8081/)
 python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("service") == "CompileCare.Api" and data.get("status") == "ready", "Unexpected API readiness payload"' <<<"$api_response"
 curl_local http://localhost:8081/openapi/v1.json >/dev/null
