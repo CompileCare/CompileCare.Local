@@ -84,11 +84,41 @@ jobs:
           PY
           echo "127.0.0.1 keycloak.localhost" | sudo tee -a /etc/hosts > /dev/null
           KEYCLOAK_ADMIN_PASSWORD=LocalOnly-CI-Password-123! python3 local/scripts/configure-keycloak.py local/.env.example --base-url http://keycloak.localhost:8082
+
           admin_token="$(curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -d grant_type=password -d client_id=admin-cli \
             -d username=admin -d password=LocalOnly-CI-Password-123! \
             http://keycloak.localhost:8082/realms/master/protocol/openid-connect/token | jq -r .access_token)"
           export KEYCLOAK_ADMIN_TOKEN="$admin_token"
+          # Simulate an already-initialized Keycloak volume with stale redirect URIs.
+          curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -H "Authorization: Bearer $admin_token" \
+            "http://keycloak.localhost:8082/admin/realms/compilecare/clients?clientId=compilecare-web" \
+            -o "$RUNNER_TEMP/compilecare-web-client-before-reconcile.json"
+          client_id="$(jq -r '.[0].id' "$RUNNER_TEMP/compilecare-web-client-before-reconcile.json")"
+          jq '.[0] | .redirectUris = (.redirectUris | map(select(. != "http://localhost:8080/auth/silent-callback")))' \
+            "$RUNNER_TEMP/compilecare-web-client-before-reconcile.json" > "$RUNNER_TEMP/compilecare-web-client-stale.json"
+          curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -X PUT -H "Authorization: Bearer $admin_token" -H "Content-Type: application/json" \
+            --data-binary @"$RUNNER_TEMP/compilecare-web-client-stale.json" \
+            "http://keycloak.localhost:8082/admin/realms/compilecare/clients/$client_id"
+
+          KEYCLOAK_ADMIN_PASSWORD=LocalOnly-CI-Password-123! python3 local/scripts/configure-keycloak.py local/.env.example --base-url http://keycloak.localhost:8082
+          curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -H "Authorization: Bearer $admin_token" \
+            "http://keycloak.localhost:8082/admin/realms/compilecare/clients?clientId=compilecare-web" \
+            -o "$RUNNER_TEMP/compilecare-web-client-after-reconcile.json"
+          python - <<'PY'
+          import json, os
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "compilecare-web-client-after-reconcile.json"), encoding="utf-8") as file:
+              clients = json.load(file)
+          assert len(clients) == 1, clients
+          redirect_uris = set(clients[0].get("redirectUris", []))
+          assert "http://localhost:8080/auth/callback" in redirect_uris, redirect_uris
+          assert "http://localhost:8080/auth/silent-callback" in redirect_uris, redirect_uris
+          print("Existing Keycloak client redirect URIs reconciled without resetting the realm.")
+          PY
+
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
             http://keycloak.localhost:8082/admin/realms/compilecare/client-scopes \

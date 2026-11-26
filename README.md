@@ -27,14 +27,21 @@ The local Keycloak realm is imported automatically on first startup:
 - Authority/issuer: `http://keycloak.localhost:8082/realms/compilecare`
 - Web client: `compilecare-web` (public client, Authorization Code flow, PKCE S256)
 - API audience: `compilecare-api` (added to access tokens by the default `compilecare-api-audience` client scope)
-- Redirect URI: `http://localhost:8080/auth/callback`
+- Sign-in redirect URI: `http://localhost:8080/auth/callback`
+- Silent-renew redirect URI: `http://localhost:8080/auth/silent-callback`
 - Post-logout URI and Web origin: `http://localhost:8080`
 
 The `.localhost` hostname resolves to loopback in the browser and is also registered as a Docker network alias, allowing the browser and API container to use the same issuer URL. The local API explicitly opts into HTTP metadata only in Development.
 
 The local Keycloak bootstrap admin defaults are stored in the ignored `local/.env`. Change `KEYCLOAK_ADMIN_PASSWORD` before first startup. After the admin console is available, create a permanent administrator in the master realm and verify that account before deleting the temporary bootstrap administrator. Do not reuse these credentials outside local development.
 
-Keycloak imports the realm only when its data volume is first initialized. To intentionally reset the local identity provider and re-import the realm (this deletes local Keycloak users and configuration):
+Keycloak imports the realm only when its data volume is first initialized. When the checked-in realm definition changes, reconcile the existing local client without deleting users or resetting the volume:
+
+```bash
+python3 local/scripts/configure-keycloak.py local/.env
+```
+
+This command idempotently updates the `compilecare-web` redirect URIs, web origins and default client scopes. To intentionally reset the local identity provider and re-import the realm (this deletes local Keycloak users and configuration):
 
 ```bash
 docker compose --env-file local/.env -f local/docker-compose.yml down
