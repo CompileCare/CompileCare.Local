@@ -40,6 +40,31 @@ if ($envLines -contains "OIDC_SCOPE=openid") {
   Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
 }
 
+function New-LocalSecret {
+  $bytes = New-Object byte[] 32
+  $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $generator.GetBytes($bytes) } finally { $generator.Dispose() }
+  return [BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+}
+$envContent = Get-Content $EnvFile -Raw
+foreach ($key in @("KEYCLOAK_ADMIN_PASSWORD", "POSTGRES_PASSWORD")) {
+  $line = Get-Content $EnvFile | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
+  $value = if ($line) { $line.Substring($key.Length + 1) } else { "" }
+  if ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-") -or
+      $value -eq "ChangeThisLocalPassword123!" -or $value -eq "compilecare-local-only") {
+    $secret = New-LocalSecret
+    if ($line) {
+      $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$secret"
+      Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+      $envContent = Get-Content $EnvFile -Raw
+    } else {
+      Add-Content -Path $EnvFile -Value "`n$key=$secret"
+      $envContent = Get-Content $EnvFile -Raw
+    }
+    $secret = $null
+  }
+}
+
 $bootstrapLine = Get-Content $EnvFile | Where-Object { $_ -match '^PLATFORM_BOOTSTRAP_SECRET=' } | Select-Object -First 1
 if (-not $bootstrapLine -or $bootstrapLine -match '^PLATFORM_BOOTSTRAP_SECRET=replace-with-') {
   $randomBytes = New-Object byte[] 32
