@@ -51,6 +51,74 @@ echo "Checking API metrics endpoint..."
 curl_local http://localhost:8081/metrics >/dev/null
 echo "  ✓ API Prometheus metrics endpoint responds"
 
+echo "Checking API-to-Collector-to-Jaeger telemetry end to end..."
+python3 - <<'PY'
+import json
+import time
+import urllib.error
+import urllib.request
+
+API = "http://localhost:8081"
+JAEGER = "http://localhost:16686"
+COLLECTOR_METRICS = "http://localhost:8889/metrics"
+
+def get(url):
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return response.read().decode("utf-8"), response.headers
+
+# Produce a simple HTTP server span and an Npgsql connection/database span
+# using only readiness checks; do not use real patient or billing data.
+for path in ("/", "/health/ready"):
+    with urllib.request.urlopen(API + path, timeout=20) as response:
+        if response.status >= 500:
+            raise RuntimeError(f"API telemetry probe failed at {path}: HTTP {response.status}")
+
+# BatchSpanProcessor flush and OTLP metric reader export are asynchronous.
+# Wait for Jaeger to index the API service and the PostgreSQL child operation.
+deadline = time.monotonic() + 90
+services = []
+operations = []
+while time.monotonic() < deadline:
+    try:
+        body, _ = get(JAEGER + "/api/v3/services")
+        services = json.loads(body).get("services", [])
+        if "CompileCare.Api" in services:
+            op_body, _ = get(JAEGER + "/api/v3/operations?service=CompileCare.Api")
+            operations = json.loads(op_body).get("operations", [])
+            operation_names = [item.get("name", "") for item in operations]
+            if any(name.startswith("CONNECT ") or name.lower() == "postgresql" for name in operation_names):
+                break
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        pass
+    time.sleep(2)
+else:
+    raise RuntimeError(
+        "CompileCare.Api traces did not reach Jaeger with an Npgsql database operation. "
+        f"services={services!r}, operations={operations!r}"
+    )
+
+# Require an API HTTP metric at the Collector's Prometheus exporter. This
+# distinguishes OTLP -> Collector -> Prometheus from the existing direct API scrape.
+metric_deadline = time.monotonic() + 90
+metric_excerpt = ""
+while time.monotonic() < metric_deadline:
+    try:
+        metric_excerpt, _ = get(COLLECTOR_METRICS)
+        if "http_server_request_duration" in metric_excerpt:
+            break
+    except (urllib.error.URLError, TimeoutError):
+        pass
+    time.sleep(2)
+else:
+    raise RuntimeError("No ASP.NET Core request-duration metric reached the Collector Prometheus exporter.")
+
+print("Verified CompileCare.Api in Jaeger with an Npgsql database span.")
+print("Verified ASP.NET Core request metrics arrive through the OTLP Collector.")
+print(f"Jaeger operations: {[item.get('name') for item in operations]}")
+PY
+echo "  ✓ API traces, Npgsql database spans and Collector-fed API metrics verified"
+
 echo
 echo "CompileCare full local infrastructure smoke checks passed."
 echo "Still required: browser sign-in, persisted tenant/RBAC checks, patient workflows, UI visual review, telemetry end-to-end correlation and production security acceptance."
