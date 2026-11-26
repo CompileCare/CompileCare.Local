@@ -341,3 +341,119 @@ jobs:
 
           print("Verified OTLP metrics -> Prometheus, OTLP traces -> Jaeger, and synthetic logs -> Elasticsearch; Kibana and all backends are ready.")
           PY
+
+  full-stack-verify:
+    name: Full nine-service Docker stack and API telemetry verification
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: CompileCare.Local
+
+      - uses: actions/checkout@v4
+        with:
+          repository: CompileCare/CompileCare.Api
+          ref: main
+          path: CompileCare.Api
+
+      - uses: actions/checkout@v4
+        with:
+          repository: CompileCare/CompileCare.Web
+          ref: main
+          path: CompileCare.Web
+
+      - name: Prepare isolated synthetic local environment and NuGet credentials
+        working-directory: CompileCare.Local
+        shell: bash
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          cp local/.env.example local/.env
+          python3 - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+
+          path = Path("local/.env")
+          values = {
+              "KEYCLOAK_ADMIN_PASSWORD": token_hex(32),
+              "POSTGRES_PASSWORD": token_hex(32),
+              "PLATFORM_BOOTSTRAP_SECRET": token_hex(32),
+          }
+          lines = path.read_text(encoding="utf-8").splitlines()
+          for key, value in values.items():
+              lines = [
+                  f"{key}={value}" if line.startswith(f"{key}=") else line
+                  for line in lines
+              ]
+          path.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+          PY
+          mkdir -p local/.secrets
+          umask 077
+          printf 'Username=%s;Password=%s;ValidAuthenticationTypes=Basic' "$GITHUB_ACTOR" "$GH_PACKAGES_TOKEN" \
+            > local/.secrets/nuget-source-credentials
+          echo "COMPILECARE_API_PATH=$GITHUB_WORKSPACE/CompileCare.Api" >> "$GITHUB_ENV"
+          echo "COMPILECARE_WEB_PATH=$GITHUB_WORKSPACE/CompileCare.Web" >> "$GITHUB_ENV"
+          echo "127.0.0.1 keycloak.localhost" | sudo tee -a /etc/hosts > /dev/null
+          test -s local/.env
+          test -s local/.secrets/nuget-source-credentials
+
+      - name: Build and run the complete nine-service Compose stack
+        working-directory: CompileCare.Local
+        shell: bash
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --project-name compilecare-fullstack-ci --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml)
+          "${compose[@]}" config --quiet
+          "${compose[@]}" pull --ignore-buildable
+          "${compose[@]}" build --pull api web
+          "${compose[@]}" up -d --remove-orphans
+
+          echo "Waiting for API, Web and Keycloak..."
+          ready=false
+          for attempt in $(seq 1 180); do
+            if curl --silent --show-error --fail --connect-timeout 3 --max-time 10 http://localhost:8081/ >/dev/null 2>&1 \
+              && curl --silent --show-error --fail --connect-timeout 3 --max-time 10 http://localhost:8080/ >/dev/null 2>&1 \
+              && curl --silent --show-error --fail --connect-timeout 3 --max-time 10 \
+                http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            "${compose[@]}" ps
+            "${compose[@]}" logs --no-color --tail=150
+            exit 1
+          fi
+
+          echo "Reconciling the local Keycloak client..."
+          python3 local/scripts/configure-keycloak.py local/.env --base-url http://keycloak.localhost:8082
+
+          echo "Running the merged nine-service verification, including real API-to-Jaeger/Npgsql and Collector metrics checks..."
+          bash local/scripts/verify-stack.sh
+
+      - name: Capture full-stack diagnostics on failure
+        if: failure()
+        working-directory: CompileCare.Local
+        run: |
+          docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
+            -f local/docker-compose.yml -f local/docker-compose.observability.yml ps || true
+          docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
+            -f local/docker-compose.yml -f local/docker-compose.observability.yml logs --no-color --tail=200 || true
+
+      - name: Stop the isolated stack and remove CI-only secrets and volumes
+        if: always()
+        working-directory: CompileCare.Local
+        run: |
+          docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
+            -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes --remove-orphans || true
+          rm -rf local/.secrets
+          rm -f local/.env
