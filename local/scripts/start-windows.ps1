@@ -17,7 +17,9 @@ $env:COMPILECARE_API_PATH = $Api
 $env:COMPILECARE_WEB_PATH = $Web
 
 $EnvFile = Join-Path $Local ".env"
+$NewLocalEnv = $false
 if (-not (Test-Path $EnvFile)) {
+  $NewLocalEnv = $true
   Copy-Item (Join-Path $Local ".env.example") $EnvFile
   $authority = Read-Host "Development OIDC Authority URL [http://keycloak.localhost:8082/realms/compilecare]"
   if ([string]::IsNullOrWhiteSpace($authority)) { $authority = "http://keycloak.localhost:8082/realms/compilecare" }
@@ -50,18 +52,16 @@ $envContent = Get-Content $EnvFile -Raw
 foreach ($key in @("KEYCLOAK_ADMIN_PASSWORD", "POSTGRES_PASSWORD")) {
   $line = Get-Content $EnvFile | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
   $value = if ($line) { $line.Substring($key.Length + 1) } else { "" }
-  if ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-") -or
-      $value -eq "ChangeThisLocalPassword123!" -or $value -eq "compilecare-local-only") {
+  if ($NewLocalEnv -and ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-"))) {
     $secret = New-LocalSecret
-    if ($line) {
-      $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$secret"
-      Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
-      $envContent = Get-Content $EnvFile -Raw
-    } else {
-      Add-Content -Path $EnvFile -Value "`n$key=$secret"
-      $envContent = Get-Content $EnvFile -Raw
-    }
+    $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$secret"
+    Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+    $envContent = Get-Content $EnvFile -Raw
     $secret = $null
+  } elseif ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-")) {
+    throw "$key is still a placeholder in an existing local/.env. Set a private value before starting; credentials are not rotated automatically because existing Docker volumes may already use them."
+  } elseif ($value -eq "ChangeThisLocalPassword123!" -or $value -eq "compilecare-local-only") {
+    Write-Warning "Preserving legacy local $key to avoid desynchronizing an existing Docker volume. Rotate it only with a coordinated volume-aware procedure."
   }
 }
 
