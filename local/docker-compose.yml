@@ -58,7 +58,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
-      ConnectionStrings__CompileCare: Host=postgres;Port=5432;Database=compilecare;Username=compilecare;Password=${POSTGRES_PASSWORD:-compilecare-local-only}
+      ConnectionStrings__CompileCare: "Host=postgres;Port=5432;Database=compilecare;Username=compilecare;Password=${POSTGRES_PASSWORD:-compilecare-local-only};GSS Encryption Mode=Disable"
       Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8082/realms/compilecare}
       Authentication__Audience: ${OIDC_AUDIENCE:-compilecare-api}
       Authentication__RequireHttpsMetadata: ${OIDC_REQUIRE_HTTPS_METADATA:-false}
