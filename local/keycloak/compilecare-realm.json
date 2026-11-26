@@ -28,6 +28,7 @@
         "post.logout.redirect.uris": "http://localhost:8080"
       },
       "defaultClientScopes": [
+        "basic",
         "profile",
         "email",
         "compilecare-api-audience"
