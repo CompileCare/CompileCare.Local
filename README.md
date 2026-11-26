@@ -6,20 +6,20 @@ This repository orchestrates the API, Web application, PostgreSQL and a preconfi
 
 ## Supported platforms
 
-- macOS: double-click **Start CompileCare.command**.
-- Windows 10/11: double-click **Start CompileCare.bat**.
+- macOS: double-click `local/Start CompileCare.command` to clone/update the application checkouts, build images and start the full application plus observability stack.
+- Windows 10/11: double-click `local/Start CompileCare.bat` (the Windows launcher currently starts the base application stack; observability overlay parity is pending).
 
 ## Prerequisites
 
 1. Docker Desktop installed and running.
-2. GitHub CLI installed and authenticated to the CompileCare organization (`gh auth login`) to clone the private Web and API repositories.
-3. A GitHub Personal Access Token with `read:packages` permission for the private CompileCare NuGet feed.
+2. Git and GitHub CLI installed and authenticated (`gh auth login`) with access to the CompileCare organization repositories.
+3. The GitHub CLI token must have `read:packages` access for the private CompileCare NuGet feed. The launcher requests this scope and stores the resulting credentials in the ignored `local/.secrets/` directory.
 
 Do not use production credentials or real patient data in local development.
 
 ## First launch
 
-The launcher clones `CompileCare.Api` and `CompileCare.Web` beside this repository when they are not already present. It creates `local/.env` from the sample and asks for local OIDC settings and a GitHub Packages token. Secrets stay in ignored local files.
+The macOS launcher clones `CompileCare.Api` and `CompileCare.Web` beside this repository when missing. Existing checkouts must be clean and on `main`; the launcher fetches and fast-forward updates them only. It never force-resets, switches branches or discards local changes. On first run it creates `local/.env` with random local-only Keycloak/PostgreSQL credentials and a one-time platform bootstrap secret. It obtains NuGet package credentials from the authenticated GitHub CLI token. Secrets stay in ignored local files.
 
 The local Keycloak realm is imported automatically on first startup:
 
@@ -63,9 +63,9 @@ The launcher automatically removes the earlier standalone `compilecare-keycloak`
 
 The API runs in Development with migrations explicitly enabled by this local Compose stack. This opt-in must not be used in Staging or Production. Normal deployments retain the default migration behavior.
 
-## Local observability (optional)
+## Local observability (included in the macOS one-click launcher)
 
-The API emits structured console logs, exposes /metrics and is instrumented for OpenTelemetry. To start the optional collector, Prometheus, Jaeger, Elasticsearch and Kibana services, use the [local observability runbook](engineering/local-observability.md):
+The macOS launcher starts the OpenTelemetry Collector, Prometheus, Jaeger, Elasticsearch and Kibana alongside the application. It pulls runtime images, builds the API and Web images, starts dependencies, reconciles the local Keycloak client and runs the full infrastructure/observability smoke checks. The API emits structured console and Elasticsearch logs, exposes `/metrics` and exports OpenTelemetry traces/metrics. For manual startup and signal troubleshooting, use the [local observability runbook](engineering/local-observability.md):
 
 ```bash
 docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml up --build -d
@@ -81,14 +81,14 @@ After the one-click launcher finishes, execute the same infrastructure and obser
 bash local/scripts/verify-stack.sh
 ```
 
-The script checks that all four Compose services are running, PostgreSQL is ready, Web/API/OpenAPI respond, and Keycloak publishes the configured OIDC issuer. It never prints credentials or reads patient data. These checks are only an infrastructure smoke test; complete the authenticated acceptance checklist separately with synthetic records. Passing this script does not prove tenant authorization, patient workflows, telemetry delivery or production readiness.
+The script checks all nine application and observability services, PostgreSQL readiness, Web/API/OpenAPI, Keycloak OIDC discovery, Prometheus, Jaeger, Elasticsearch, Kibana, Collector metrics and the API metrics endpoint. It never prints credentials or reads patient data. These checks are only an infrastructure smoke test; complete the authenticated acceptance checklist separately with synthetic records. Passing this script does not prove tenant authorization, patient workflows, telemetry delivery or production readiness.
 
 ## Stop
 
-Use **Stop CompileCare.command** or **Stop CompileCare.bat**. PostgreSQL and Keycloak volumes are retained. To intentionally delete the local database and identity provider:
+Use `local/Stop CompileCare.command` or `local/Stop CompileCare.bat`. The macOS stop command stops both the application and observability Compose overlay. PostgreSQL, Keycloak, Prometheus and Elasticsearch volumes are retained. To intentionally delete local data, use the explicit volume-removal command:
 
 ```bash
-docker compose --env-file local/.env -f local/docker-compose.yml down --volumes
+docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes
 ```
 
 ## Security
