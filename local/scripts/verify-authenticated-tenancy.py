@@ -399,8 +399,6 @@ def create_hospital(api: Api, token: str, tenant_id: str, name: str, code: str) 
     return body["id"]
 
 
-
-
 def create_department(api: Api, token: str, tenant_id: str, hospital_id: str, name: str, code: str) -> str:
     body = require_status(
         f"Create department {code}",
@@ -414,6 +412,7 @@ def create_department(api: Api, token: str, tenant_id: str, hospital_id: str, na
         201,
     )
     return body["id"]
+
 
 def expect_api_status(
     action: str,
@@ -564,7 +563,7 @@ def run() -> None:
         "FacilityViewer cannot search department-scoped patients",
         api,
         "GET",
-        f"/api/v1/hospitals/{hospital_b}/departments/{department_b}/patients?page=1&pageSize=25",
+        f"/api/v1/hospitals/{hospital_b}/patients/departments/{department_b}/patients?page=1&pageSize=25",
         tokens["shared"],
         tenant_b,
         403,
@@ -573,7 +572,7 @@ def run() -> None:
         "FacilityViewer cannot read department-scoped patient identity details",
         api,
         "GET",
-        f"/api/v1/hospitals/{hospital_b}/departments/{department_b}/patients/00000000-0000-0000-0000-000000000000",
+        f"/api/v1/hospitals/{hospital_b}/patients/departments/{department_b}/patients/00000000-0000-0000-0000-000000000000",
         tokens["shared"],
         tenant_b,
         403,
