@@ -41,7 +41,7 @@ jobs:
           PY
       - name: Validate Keycloak realm import
         run: |
-          python -m py_compile local/scripts/configure-keycloak.py
+          python -m py_compile local/scripts/configure-keycloak.py local/scripts/provision-kibana-data-view.py
           python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
           python - <<'PY'
           import json
@@ -233,6 +233,16 @@ jobs:
 
           wait_for("http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s", "Elasticsearch")
           wait_for("http://localhost:5601/api/status", "Kibana")
+          import subprocess, sys
+          subprocess.run(
+              [sys.executable, "local/scripts/provision-kibana-data-view.py", "--base-url", "http://localhost:5601"],
+              check=True,
+          )
+          data_views = request("http://localhost:5601/api/data_views")
+          assert any(
+              view.get("title") == "compilecare-logs-*"
+              for view in data_views.get("data_view", [])
+          ), "CompileCare Logs Kibana data view was not provisioned"
           wait_for("http://localhost:9090/-/ready", "Prometheus")
           wait_for("http://localhost:16686/", "Jaeger")
           wait_for("http://localhost:8889/metrics", "OpenTelemetry Collector Prometheus exporter")
