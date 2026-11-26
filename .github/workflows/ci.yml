@@ -153,9 +153,162 @@ jobs:
           print("Keycloak profile/email claims and default API audience scope verified.")
           PY
           docker rm -f compilecare-keycloak-ci
+      - name: Validate OpenTelemetry Collector configuration
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/local/observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro" \
+            otel/opentelemetry-collector:0.165.0 \
+            validate --config=/etc/otel-collector-config.yaml
       - name: Validate Docker Compose configuration
         run: |
           mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
           printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
           COMPILECARE_API_PATH="$GITHUB_WORKSPACE" COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml config --quiet
+          COMPILECARE_API_PATH="$GITHUB_WORKSPACE" COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml config --quiet
           rm -rf local/.secrets
+      - name: Run Docker observability pipeline smoke test
+        run: |
+          set -euo pipefail
+          mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
+          printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
+          export COMPILECARE_API_PATH="$GITHUB_WORKSPACE"
+          export COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web"
+          compose=(--project-name compilecare-observability-ci --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml)
+          cleanup() {
+            docker compose "${compose[@]}" down --volumes --remove-orphans || true
+            rm -rf local/.secrets
+          }
+          trap cleanup EXIT
+
+          # Start only the observability services; the API image is not needed for this backend pipeline smoke.
+          docker compose "${compose[@]}" up -d otel-collector jaeger prometheus elasticsearch kibana
+
+          python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          def request(url, method="GET", payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              headers = {"Accept": "application/json"}
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req, timeout=5) as response:
+                  body = response.read()
+                  return json.loads(body) if body and "json" in response.headers.get("Content-Type", "") else body
+
+          def wait_for(url, label, attempts=90):
+              last = None
+              for _ in range(attempts):
+                  try:
+                      request(url)
+                      print(f"{label} is ready")
+                      return
+                  except Exception as error:
+                      last = error
+                      time.sleep(2)
+              raise RuntimeError(f"{label} did not become ready: {last}")
+
+          wait_for("http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s", "Elasticsearch")
+          wait_for("http://localhost:5601/api/status", "Kibana")
+          wait_for("http://localhost:9090/-/ready", "Prometheus")
+          wait_for("http://localhost:16686/", "Jaeger")
+          wait_for("http://localhost:8889/metrics", "OpenTelemetry Collector Prometheus exporter")
+
+          now = time.time_ns()
+          start = str(now - 1_000_000_000)
+          end = str(now)
+          trace_id = "0102030405060708090a0b0c0d0e0f10"
+          span_id = "0102030405060708"
+
+          metrics_payload = {
+              "resourceMetrics": [{
+                  "resource": {"attributes": [
+                      {"key": "service.name", "value": {"stringValue": "CompileCare.Api.CI"}}
+                  ]},
+                  "scopeMetrics": [{
+                      "scope": {"name": "compilecare-ci-smoke"},
+                      "metrics": [{
+                          "name": "compilecare_ci_smoke_total",
+                          "sum": {
+                              "dataPoints": [{
+                                  "attributes": [{"key": "scenario", "value": {"stringValue": "docker-overlay"}}],
+                                  "startTimeUnixNano": start,
+                                  "timeUnixNano": end,
+                                  "asInt": "1"
+                              }],
+                              "aggregationTemporality": 2,
+                              "isMonotonic": True
+                          }
+                      }]
+                  }]
+              }]
+          }
+          request("http://localhost:4318/v1/metrics", "POST", metrics_payload)
+
+          traces_payload = {
+              "resourceSpans": [{
+                  "resource": {"attributes": [
+                      {"key": "service.name", "value": {"stringValue": "CompileCare.Api.CI"}}
+                  ]},
+                  "scopeSpans": [{
+                      "scope": {"name": "compilecare-ci-smoke"},
+                      "spans": [{
+                          "traceId": trace_id,
+                          "spanId": span_id,
+                          "name": "compilecare-observability-ci-smoke",
+                          "kind": 1,
+                          "startTimeUnixNano": start,
+                          "endTimeUnixNano": end,
+                          "status": {"code": 1}
+                      }]
+                  }]
+              }]
+          }
+          request("http://localhost:4318/v1/traces", "POST", traces_payload)
+
+          log_payload = {
+              "@timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "service": "CompileCare.Api.CI",
+              "message": "Synthetic CompileCare observability pipeline smoke",
+              "correlation_id": "ci-observability-smoke"
+          }
+          request("http://localhost:9200/compilecare-logs-ci-smoke/_doc", "POST", log_payload)
+
+          # Wait for the collector scrape and verify the sample metric is queryable.
+          metric_query = urllib.parse.quote("compilecare_ci_smoke_total")
+          metric_result = None
+          for _ in range(30):
+              try:
+                  result = request(f"http://localhost:9090/api/v1/query?query={metric_query}")
+                  if result.get("data", {}).get("result"):
+                      metric_result = result
+                      break
+              except Exception:
+                  pass
+              time.sleep(2)
+          assert metric_result is not None, "Synthetic OTLP metric was not queryable in Prometheus"
+
+          # Verify that the synthetic trace reached Jaeger.
+          trace_result = None
+          for _ in range(30):
+              try:
+                  result = request(f"http://localhost:16686/api/v3/traces/{trace_id}")
+                  trace_payload = result.get("result", {})
+                  if trace_payload.get("resourceSpans"):
+                      trace_result = trace_payload
+                      break
+              except Exception:
+                  pass
+              time.sleep(2)
+          assert trace_result is not None, "Synthetic OTLP trace was not queryable in Jaeger's v3 trace API"
+
+          # Verify Elasticsearch accepted and can return a synthetic log record.
+          log_result = request("http://localhost:9200/compilecare-logs-ci-smoke/_search?q=correlation_id:ci-observability-smoke")
+          assert log_result.get("hits", {}).get("total", {}).get("value", 0) > 0, "Synthetic log record was not queryable in Elasticsearch"
+
+          print("Verified OTLP metrics -> Prometheus, OTLP traces -> Jaeger, and synthetic logs -> Elasticsearch; Kibana and all backends are ready.")
+          PY
