@@ -126,7 +126,20 @@ def main() -> int:
     )
     if len(clients) != 1:
         raise RuntimeError("Expected exactly one compilecare-web client in the local realm.")
-    client_id = clients[0]["id"]
+    client = clients[0]
+    client_id = client["id"]
+
+    # Keep an existing realm volume aligned with the checked-in client definition.
+    # Realm import only runs on first initialization, so this reconciliation avoids
+    # deleting local users or resetting the Keycloak data volume.
+    desired_redirect_uris = client_spec.get("redirectUris", [])
+    desired_web_origins = client_spec.get("webOrigins", [])
+    if (set(client.get("redirectUris", [])) != set(desired_redirect_uris)
+            or set(client.get("webOrigins", [])) != set(desired_web_origins)):
+        client["redirectUris"] = desired_redirect_uris
+        client["webOrigins"] = desired_web_origins
+        admin.request("PUT", f"/admin/realms/{realm_name}/clients/{client_id}", client)
+
     defaults = admin.request(
         "GET",
         f"/admin/realms/{realm_name}/clients/{client_id}/default-client-scopes",
@@ -139,6 +152,7 @@ def main() -> int:
                 f"/admin/realms/{realm_name}/clients/{client_id}/default-client-scopes/{scope_ids[name]}",
             )
 
+    print("CompileCare local Keycloak client reconciled: redirect URIs and web origins")
     print("CompileCare local Keycloak scopes reconciled: " + ", ".join(desired_names))
     return 0
 
