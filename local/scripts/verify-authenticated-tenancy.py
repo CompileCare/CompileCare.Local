@@ -179,8 +179,29 @@ def create_ci_client(admin: KeycloakAdmin) -> str:
         (scope for scope in scopes if scope.get("name") == "compilecare-api-audience"),
         None,
     )
+    basic_scope = next(
+        (scope for scope in scopes if scope.get("name") == "basic"),
+        None,
+    )
     if audience_scope is None:
         raise RuntimeError("The CompileCare API audience client scope is missing.")
+    if basic_scope is None:
+        raise RuntimeError("The Keycloak basic client scope is missing; access tokens require its Subject (sub) mapper.")
+
+    basic_mappers = require_status(
+        "Read Keycloak basic scope protocol mappers",
+        admin.call(
+            "GET",
+            f"/admin/realms/{REALM}/client-scopes/{basic_scope['id']}/protocol-mappers/models",
+        ),
+        200,
+    )
+    if not any(
+        mapper.get("protocolMapper") == "oidc-sub-mapper"
+        and mapper.get("config", {}).get("access.token.claim") == "true"
+        for mapper in basic_mappers
+    ):
+        raise RuntimeError("The Keycloak basic scope is missing its access-token Subject (sub) mapper.")
 
     status, body, _ = admin.call(
         "POST",
@@ -214,14 +235,18 @@ def create_ci_client(admin: KeycloakAdmin) -> str:
         raise RuntimeError("Expected exactly one temporary CI client in Keycloak.")
     client_uuid = clients[0]["id"]
 
-    require_status(
-        "Assign API audience scope to temporary CI client",
-        admin.call(
-            "PUT",
-            f"/admin/realms/{REALM}/clients/{client_uuid}/default-client-scopes/{audience_scope['id']}",
-        ),
-        204,
-    )
+    for label, scope in (
+        ("basic subject", basic_scope),
+        ("API audience", audience_scope),
+    ):
+        require_status(
+            f"Assign {label} scope to temporary CI client",
+            admin.call(
+                "PUT",
+                f"/admin/realms/{REALM}/clients/{client_uuid}/default-client-scopes/{scope['id']}",
+            ),
+            204,
+        )
     return client_uuid
 
 
