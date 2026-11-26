@@ -13,7 +13,7 @@ docker compose --env-file local/.env \
   up --build -d
 ```
 
-The overlay leaves the standard local stack unchanged when it is not supplied. It pins the OpenTelemetry Collector to 0.165.0, Jaeger to 2.23.0 and Prometheus to 3.16.0 so local telemetry behavior is reproducible. The API OTLP exporter uses HTTP Protobuf on the collector HTTP receiver at otel-collector:4318; the Collector uses the current `otlp_http` exporter and an explicit Jaeger traces endpoint (`http://jaeger:4318/v1/traces`). The overlay also configures the existing Serilog Elasticsearch sink.
+The overlay leaves the standard local stack unchanged when it is not supplied. It pins the OpenTelemetry Collector to 0.165.0, Jaeger to 2.23.0 and Prometheus to 3.16.0 so local telemetry behavior is reproducible. The API OTLP exporter uses gRPC on the collector receiver at otel-collector:4317; the Collector uses the current `otlp_http` exporter and an explicit Jaeger traces endpoint (`http://jaeger:4318/v1/traces`). The overlay also configures the existing Serilog Elasticsearch sink.
 
 ## Where to view telemetry
 
@@ -23,7 +23,7 @@ The overlay leaves the standard local stack unchanged when it is not supplied. I
 | Metrics | http://localhost:9090 (Prometheus) | Query API and collector metrics; inspect the compilecare-api and compilecare-otel-collector scrape targets |
 | Distributed traces | http://localhost:16686 (Jaeger) | Select the CompileCare.Api service and inspect request traces |
 | Raw API metrics | http://localhost:8081/metrics | Verify the API Prometheus scrape endpoint directly |
-| Collector OTLP HTTP | http://localhost:4318 | OTLP HTTP Protobuf receiver for local services |
+| Collector OTLP gRPC | http://localhost:4317 | OTLP gRPC receiver used by CompileCare.Api |\n| Collector OTLP HTTP | http://localhost:4318 | OTLP HTTP Protobuf receiver for compatible local/test senders |
 | API health | http://localhost:8081/health/live and http://localhost:8081/health/ready | Verify process and dependency health |
 
 The API writes structured Serilog events to stdout and Elasticsearch when ElasticConfiguration:Uri is set. Docker logs remain available as a fallback:
