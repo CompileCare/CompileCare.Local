@@ -37,6 +37,22 @@ if grep -qx 'OIDC_SCOPE=openid' "$LOCAL/.env"; then
   sed -i '' 's|^OIDC_SCOPE=openid$|OIDC_SCOPE=openid profile|' "$LOCAL/.env"
 fi
 
+# Generate unique local-only credentials instead of relying on checked-in sample passwords.
+command -v openssl >/dev/null || fail "OpenSSL is required to generate local-only credentials."
+for key in KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD; do
+  current="$(sed -n "s/^${key}=//p" "$LOCAL/.env" | head -n 1)"
+  if [[ -z "$current" || "$current" == replace-with-* || "$current" == "ChangeThisLocalPassword123!" || "$current" == "compilecare-local-only" ]]; then
+    generated="$(openssl rand -hex 32)"
+    if grep -q "^${key}=" "$LOCAL/.env"; then
+      sed -i '' "s|^${key}=.*|${key}=${generated}|" "$LOCAL/.env"
+    else
+      printf '\n%s=%s\n' "$key" "$generated" >> "$LOCAL/.env"
+    fi
+    unset generated
+  fi
+done
+chmod 600 "$LOCAL/.env"
+
 # Generate a one-time local bootstrap secret when the example value is still present.
 if ! grep -q '^PLATFORM_BOOTSTRAP_SECRET=.' "$LOCAL/.env" || grep -q '^PLATFORM_BOOTSTRAP_SECRET=replace-with-' "$LOCAL/.env"; then
   command -v openssl >/dev/null || fail "OpenSSL is required to generate the local bootstrap secret."
