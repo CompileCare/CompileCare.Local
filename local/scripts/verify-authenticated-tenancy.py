@@ -503,6 +503,24 @@ def run() -> None:
         api, tokens["tenant-b-admin"], tenant_b, "CI Hospital B", f"B-{suffix.upper()}"
     )
 
+    # FacilityViewer is a facility-read-only role. Prove the API rejects
+    # patient registration even when called directly with a valid Keycloak token.
+    expect_api_status(
+        "FacilityViewer cannot register a patient",
+        api,
+        "POST",
+        f"/api/v1/hospitals/{hospital_b}/patients",
+        tokens["shared"],
+        tenant_b,
+        403,
+        {
+            "givenName": "CI Forbidden",
+            "middleName": None,
+            "familyName": "FacilityViewer",
+            "dateOfBirth": "1990-01-02",
+        },
+    )
+
     contexts = require_status(
         "List current user's active tenant contexts",
         api.call("GET", "/api/v1/me/tenant-contexts?page=1&pageSize=50", tokens["shared"]),
