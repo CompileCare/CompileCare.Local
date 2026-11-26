@@ -450,6 +450,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          # Keep the verifier's own docker compose calls in the same isolated
+          # project context as the stack started below.
+          export COMPOSE_PROJECT_NAME=compilecare-fullstack-ci
           compose=(docker compose --project-name compilecare-fullstack-ci --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml)
           "${compose[@]}" config --quiet
           "${compose[@]}" pull --ignore-buildable
