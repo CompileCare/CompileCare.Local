@@ -69,7 +69,7 @@ services:
 
   api:
     environment:
-      OpenTelemetry__OtlpEndpoint: http://otel-collector:4318
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       ElasticConfiguration__Uri: http://elasticsearch:9200
     depends_on:
       otel-collector:
