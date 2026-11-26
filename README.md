@@ -73,6 +73,16 @@ docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker
 
 Dashboards: Kibana at http://localhost:5601 (logs), Prometheus at http://localhost:9090 (metrics), and Jaeger at http://localhost:16686 (traces). This overlay is local-only and must use synthetic data.
 
+## Verify the local stack
+
+After the services are running, execute the infrastructure smoke checks:
+
+```bash
+bash local/scripts/verify-stack.sh
+```
+
+The script checks that all four Compose services are running, PostgreSQL is ready, Web/API/OpenAPI respond, and Keycloak publishes the configured OIDC issuer. It never prints credentials or reads patient data. These checks are only an infrastructure smoke test; complete the authenticated acceptance checklist separately with synthetic records. Passing this script does not prove tenant authorization, patient workflows, telemetry delivery or production readiness.
+
 ## Stop
 
 Use **Stop CompileCare.command** or **Stop CompileCare.bat**. PostgreSQL and Keycloak volumes are retained. To intentionally delete the local database and identity provider:

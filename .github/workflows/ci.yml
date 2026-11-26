@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate macOS shell script
         run: bash -n local/scripts/start-macos.sh
+      - name: Validate local stack smoke script
+        run: bash -n local/scripts/verify-stack.sh
       - name: Validate Windows PowerShell script
         shell: pwsh
         run: |
