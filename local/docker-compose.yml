@@ -36,7 +36,7 @@ services:
     environment:
       POSTGRES_DB: compilecare
       POSTGRES_USER: compilecare
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-compilecare-local-only}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in local/.env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
