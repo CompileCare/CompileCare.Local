@@ -489,7 +489,22 @@ jobs:
         working-directory: CompileCare.Local
         env:
           COMPILECARE_CI_ACCEPTANCE: "1"
+          COMPILECARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/compilecare-browser-user.json
         run: python3 local/scripts/verify-authenticated-tenancy.py
+
+      - name: Install Node.js for real browser acceptance
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run real Keycloak Authorization Code + PKCE browser acceptance
+        working-directory: CompileCare.Web
+        env:
+          COMPILECARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/compilecare-browser-user.json
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:e2e:real-oidc
 
       - name: Capture full-stack diagnostics on failure
         if: failure()
@@ -508,3 +523,4 @@ jobs:
             -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes --remove-orphans || true
           rm -rf local/.secrets
           rm -f local/.env
+          rm -f "${RUNNER_TEMP}/compilecare-browser-user.json"
