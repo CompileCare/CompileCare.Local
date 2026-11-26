@@ -111,24 +111,80 @@ if ($allContainers -contains "compilecare-keycloak") {
   }
 }
 
-docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") up --build -d
+$BaseCompose = Join-Path $Local "docker-compose.yml"
+$ObservabilityCompose = Join-Path $Local "docker-compose.observability.yml"
+$ComposeArgs = @("--env-file", $EnvFile, "-f", $BaseCompose, "-f", $ObservabilityCompose)
+
+Write-Host "Validating the complete application and observability Compose configuration..."
+& docker compose @ComposeArgs config --quiet
+if ($LASTEXITCODE -ne 0) { throw "Docker Compose configuration is invalid." }
+
+Write-Host "Pulling runtime images and building the API and Web images..."
+& docker compose @ComposeArgs pull --ignore-buildable
+if ($LASTEXITCODE -ne 0) { throw "Could not pull one or more runtime images." }
+& docker compose @ComposeArgs build --pull api web
+if ($LASTEXITCODE -ne 0) { throw "API/Web Docker build failed. Inspect local logs." }
+
+Write-Host "Starting CompileCare and all observability services..."
+& docker compose @ComposeArgs up -d --remove-orphans
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed. Inspect local logs." }
+
 if (Get-Command py -ErrorAction SilentlyContinue) {
-  py -3 (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
+  $Python = "py"
+  $PythonPrefix = @("-3")
 } elseif (Get-Command python -ErrorAction SilentlyContinue) {
-  python (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
+  $Python = "python"
+  $PythonPrefix = @()
 } else {
-  throw "Python 3 is required to reconcile local Keycloak scopes. Install Python 3 and retry."
+  throw "Python 3 is required for local Keycloak and Kibana configuration. Install Python 3 and retry."
 }
+
+& $Python @PythonPrefix (Join-Path $Local "scripts/configure-keycloak.py") $EnvFile --base-url http://keycloak.localhost:8082
 if ($LASTEXITCODE -ne 0) { throw "Could not reconcile local Keycloak OIDC scopes. Check the admin credentials and Keycloak logs." }
-for ($i=0; $i -lt 90; $i++) {
+
+Write-Host "Waiting for all nine services and their local endpoints..."
+$Ready = $false
+for ($i = 0; $i -lt 180; $i++) {
   try {
-    Invoke-WebRequest http://localhost:8081/ -UseBasicParsing -TimeoutSec 2 | Out-Null
-    Invoke-WebRequest http://localhost:8080/ -UseBasicParsing -TimeoutSec 2 | Out-Null
-    Start-Process "http://localhost:8080"
-    Write-Host "CompileCare is running. Local identity provider: http://keycloak.localhost:8082"
-    exit 0
-  } catch { Start-Sleep -Seconds 2 }
+    Invoke-WebRequest http://localhost:8081/ -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://localhost:8080/ -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://localhost:9090/-/ready -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://localhost:16686/ -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://localhost:9200/_cluster/health -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://localhost:8889/metrics -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Invoke-WebRequest http://localhost:5601/api/status -UseBasicParsing -TimeoutSec 3 | Out-Null
+    $Ready = $true
+    break
+  } catch {
+    Start-Sleep -Seconds 2
+  }
 }
-docker compose --env-file $EnvFile -f (Join-Path $Local "docker-compose.yml") ps
-throw "Startup timeout. Inspect local logs."
+if (-not $Ready) {
+  & docker compose @ComposeArgs ps
+  & docker compose @ComposeArgs logs --no-color --tail=150
+  throw "Timed out waiting for the complete CompileCare stack. Inspect the logs above."
+}
+
+& docker compose @ComposeArgs exec -T postgres pg_isready -U compilecare -d compilecare
+if ($LASTEXITCODE -ne 0) { throw "PostgreSQL is not accepting connections." }
+
+Invoke-WebRequest http://localhost:8081/openapi/v1.json -UseBasicParsing -TimeoutSec 10 | Out-Null
+Invoke-WebRequest http://localhost:8081/metrics -UseBasicParsing -TimeoutSec 10 | Out-Null
+
+Write-Host "Provisioning the CompileCare Logs Kibana data view..."
+& $Python @PythonPrefix (Join-Path $Local "scripts/provision-kibana-data-view.py") --base-url http://localhost:5601
+if ($LASTEXITCODE -ne 0) { throw "Could not provision the Kibana data view." }
+
+Write-Host ""
+Write-Host "CompileCare is ready with the full nine-service observability stack."
+Write-Host "  Workspace:     http://localhost:8080"
+Write-Host "  API/OpenAPI:   http://localhost:8081/openapi/v1.json"
+Write-Host "  Keycloak:      http://keycloak.localhost:8082"
+Write-Host "  Prometheus:    http://localhost:9090"
+Write-Host "  Jaeger:        http://localhost:16686"
+Write-Host "  Kibana:        http://localhost:5601"
+Write-Host "  Elasticsearch: http://localhost:9200"
+Write-Host ""
+Write-Host "Use synthetic test data only. No production patient data or credentials."
+Start-Process "http://localhost:8080"
