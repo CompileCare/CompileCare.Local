@@ -47,6 +47,10 @@ curl_local http://localhost:5601/api/status >/dev/null
 curl_local http://localhost:8889/metrics >/dev/null
 echo "  ✓ Prometheus, Jaeger, Elasticsearch, Kibana and Collector metrics endpoint respond"
 
+echo "Provisioning the CompileCare Logs Kibana data view..."
+python3 local/scripts/provision-kibana-data-view.py --base-url http://localhost:5601
+echo "  ✓ Kibana data view compilecare-logs-* is ready"
+
 echo "Checking API metrics endpoint..."
 curl_local http://localhost:8081/metrics >/dev/null
 echo "  ✓ API Prometheus metrics endpoint responds"
