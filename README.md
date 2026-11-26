@@ -33,7 +33,7 @@ The local Keycloak realm is imported automatically on first startup:
 
 The `.localhost` hostname resolves to loopback in the browser and is also registered as a Docker network alias, allowing the browser and API container to use the same issuer URL. The local API explicitly opts into HTTP metadata only in Development.
 
-The local Keycloak bootstrap admin defaults are stored in the ignored `local/.env`. Change `KEYCLOAK_ADMIN_PASSWORD` before first startup. After the admin console is available, create a permanent administrator in the master realm and verify that account before deleting the temporary bootstrap administrator. Do not reuse these credentials outside local development.
+The launcher generates independent random 256-bit Keycloak admin and PostgreSQL passwords in the ignored `local/.env` before startup. The local Keycloak admin username defaults to `admin`; these generated credentials are local-only and must never be reused elsewhere. After the admin console is available, create a permanent administrator in the master realm and verify that account before deleting the temporary bootstrap administrator. Do not reuse these credentials outside local development.
 
 Keycloak imports the realm only when its data volume is first initialized. When the checked-in realm definition changes, reconcile the existing local client without deleting users or resetting the volume:
 
