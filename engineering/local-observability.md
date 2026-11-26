@@ -23,7 +23,8 @@ The overlay leaves the standard local stack unchanged when it is not supplied. I
 | Metrics | http://localhost:9090 (Prometheus) | Query API and collector metrics; inspect the compilecare-api and compilecare-otel-collector scrape targets |
 | Distributed traces | http://localhost:16686 (Jaeger) | Select the CompileCare.Api service and inspect request traces |
 | Raw API metrics | http://localhost:8081/metrics | Verify the API Prometheus scrape endpoint directly |
-| Collector OTLP gRPC | http://localhost:4317 | OTLP gRPC receiver used by CompileCare.Api |\n| Collector OTLP HTTP | http://localhost:4318 | OTLP HTTP Protobuf receiver for compatible local/test senders |
+| Collector OTLP gRPC | http://localhost:4317 | OTLP gRPC receiver used by CompileCare.Api |
+| Collector OTLP HTTP | http://localhost:4318 | OTLP HTTP Protobuf receiver for compatible local/test senders |
 | API health | http://localhost:8081/health/live and http://localhost:8081/health/ready | Verify process and dependency health |
 
 The API writes structured Serilog events to stdout and Elasticsearch when ElasticConfiguration:Uri is set. Docker logs remain available as a fallback:
