@@ -16,8 +16,10 @@ if [[ ! -d "$API/.git" ]]; then gh repo clone CompileCare/CompileCare.Api "$API"
 if [[ ! -d "$WEB/.git" ]]; then gh repo clone CompileCare/CompileCare.Web "$WEB" || fail "Unable to clone CompileCare.Web."; fi
 export COMPILECARE_API_PATH="$API" COMPILECARE_WEB_PATH="$WEB"
 
+NEW_LOCAL_ENV=false
 if [[ ! -f "$LOCAL/.env" ]]; then
   cp "$LOCAL/.env.example" "$LOCAL/.env"
+  NEW_LOCAL_ENV=true
   read -r -p "Development OIDC Authority URL [http://keycloak.localhost:8082/realms/compilecare]: " authority
   authority="${authority:-http://keycloak.localhost:8082/realms/compilecare}"
   read -r -p "API Audience [compilecare-api]: " audience
@@ -41,14 +43,14 @@ fi
 command -v openssl >/dev/null || fail "OpenSSL is required to generate local-only credentials."
 for key in KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD; do
   current="$(sed -n "s/^${key}=//p" "$LOCAL/.env" | head -n 1)"
-  if [[ -z "$current" || "$current" == replace-with-* || "$current" == "ChangeThisLocalPassword123!" || "$current" == "compilecare-local-only" ]]; then
+  if [[ "$NEW_LOCAL_ENV" == "true" && ( -z "$current" || "$current" == replace-with-* ) ]]; then
     generated="$(openssl rand -hex 32)"
-    if grep -q "^${key}=" "$LOCAL/.env"; then
-      sed -i '' "s|^${key}=.*|${key}=${generated}|" "$LOCAL/.env"
-    else
-      printf '\n%s=%s\n' "$key" "$generated" >> "$LOCAL/.env"
-    fi
+    sed -i '' "s|^${key}=.*|${key}=${generated}|" "$LOCAL/.env"
     unset generated
+  elif [[ -z "$current" || "$current" == replace-with-* ]]; then
+    fail "$key is still a placeholder in an existing local/.env. Set a private value before starting; credentials are not rotated automatically because existing Docker volumes may already use them."
+  elif [[ "$current" == "ChangeThisLocalPassword123!" || "$current" == "compilecare-local-only" ]]; then
+    echo "WARNING: preserving legacy local $key to avoid desynchronizing an existing Docker volume. Rotate it only with a coordinated volume-aware procedure."
   fi
 done
 chmod 600 "$LOCAL/.env"
