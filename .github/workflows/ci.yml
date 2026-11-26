@@ -85,6 +85,11 @@ jobs:
           echo "127.0.0.1 keycloak.localhost" | sudo tee -a /etc/hosts > /dev/null
           KEYCLOAK_ADMIN_PASSWORD=LocalOnly-CI-Password-123! python3 local/scripts/configure-keycloak.py local/.env.example --base-url http://keycloak.localhost:8082
 
+          admin_token="$(curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
+            -d grant_type=password -d client_id=admin-cli \
+            -d username=admin -d password=LocalOnly-CI-Password-123! \
+            http://keycloak.localhost:8082/realms/master/protocol/openid-connect/token | jq -r .access_token)"
+          export KEYCLOAK_ADMIN_TOKEN="$admin_token"
           # Simulate an already-initialized Keycloak volume with stale redirect URIs.
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
@@ -114,11 +119,6 @@ jobs:
           print("Existing Keycloak client redirect URIs reconciled without resetting the realm.")
           PY
 
-          admin_token="$(curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
-            -d grant_type=password -d client_id=admin-cli \
-            -d username=admin -d password=LocalOnly-CI-Password-123! \
-            http://keycloak.localhost:8082/realms/master/protocol/openid-connect/token | jq -r .access_token)"
-          export KEYCLOAK_ADMIN_TOKEN="$admin_token"
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
             http://keycloak.localhost:8082/admin/realms/compilecare/client-scopes \
