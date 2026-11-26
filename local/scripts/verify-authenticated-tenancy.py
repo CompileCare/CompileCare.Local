@@ -383,10 +383,11 @@ def expect_api_status(
     token: str,
     tenant_id: str | None,
     expected: int,
+    payload: Any = None,
 ) -> Any:
     return require_status(
         action,
-        api.call(method, path, token, tenant_id),
+        api.call(method, path, token, tenant_id, payload),
         expected,
     )
 
@@ -540,12 +541,14 @@ def run() -> None:
     expect_api_status(
         "Tenant A administrator cannot update tenant B membership",
         api, "PUT", f"/api/v1/tenant/memberships/{membership_b}",
-        tokens["tenant-a-admin"], tenant_a, 404
+        tokens["tenant-a-admin"], tenant_a, 404,
+        {"role": "FacilityViewer", "scopes": [{"scopeType": "Tenant"}]}
     )
     expect_api_status(
         "Tenant B administrator cannot update tenant A membership",
         api, "PUT", f"/api/v1/tenant/memberships/{membership_a}",
-        tokens["tenant-b-admin"], tenant_b, 404
+        tokens["tenant-b-admin"], tenant_b, 404,
+        {"role": "FacilityViewer", "scopes": [{"scopeType": "Tenant"}]}
     )
 
     # Revocation takes effect on the next request without invalidating access to
