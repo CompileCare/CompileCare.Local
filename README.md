@@ -106,3 +106,9 @@ docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker
 - Keycloak is local-development-only and has no production data or external exposure.
 - API authentication, validated issuer/audience, persisted tenant membership and authorization remain enabled.
 - No bypass login or automatic platform-operator bootstrap is provided.
+
+## Local Web Content Security Policy
+
+The Web container now enforces CSP. The local Compose configuration explicitly allows the local API origin (`http://localhost:8081`) and Keycloak origin (`http://keycloak.localhost:8082`) for browser connections, and Keycloak for the silent-renew iframe. `ALLOW_INSECURE_CSP_ORIGINS=true` is set only by this local-development Compose file because the local identity/API endpoints use loopback HTTP.
+
+If you override `OIDC_AUTHORITY` or the Web API URL for a different local topology, also set `CSP_CONNECT_SRC` and `CSP_FRAME_SRC` in ignored `local/.env` to the corresponding bare origins (scheme, host and optional port only). Do not copy the local HTTP exception into production. Production Web containers must use HTTPS origins and must not set `ALLOW_INSECURE_CSP_ORIGINS`.
