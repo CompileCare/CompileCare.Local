@@ -41,7 +41,7 @@ jobs:
           PY
       - name: Validate Keycloak realm import
         run: |
-          python -m py_compile local/scripts/configure-keycloak.py local/scripts/provision-kibana-data-view.py
+          python -m py_compile local/scripts/configure-keycloak.py local/scripts/provision-kibana-data-view.py local/scripts/verify-authenticated-tenancy.py
           python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
           python - <<'PY'
           import json
@@ -482,6 +482,12 @@ jobs:
 
           echo "Running the merged nine-service verification, including real API-to-Jaeger/Npgsql and Collector metrics checks..."
           bash local/scripts/verify-stack.sh
+
+      - name: Verify real Keycloak-issued identities and persisted multi-tenant workflows
+        working-directory: CompileCare.Local
+        env:
+          COMPILECARE_CI_ACCEPTANCE: "1"
+        run: python3 local/scripts/verify-authenticated-tenancy.py
 
       - name: Capture full-stack diagnostics on failure
         if: failure()
