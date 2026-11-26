@@ -41,7 +41,7 @@ echo "  ✓ OpenAPI document is reachable"
 
 echo "Checking Keycloak OIDC discovery..."
 oidc_response=$(curl --fail --silent --show-error http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration)
-python3 -c 'import json,sys; data=json.load(sys.stdin); expected="http://keycloak.localhost:8082/realms/compilecare"; assert data.get("issuer") == expected, f"Unexpected OIDC issuer: {data.get('issuer')!r}"; assert data.get("authorization_endpoint") and data.get("token_endpoint") and data.get("jwks_uri"), "OIDC discovery document is incomplete"' <<<"$oidc_response"
+python3 -c 'import json,sys; data=json.load(sys.stdin); expected="http://keycloak.localhost:8082/realms/compilecare"; actual=data.get("issuer"); assert actual == expected, f"Unexpected OIDC issuer: {actual!r}"; assert data.get("authorization_endpoint") and data.get("token_endpoint") and data.get("jwks_uri"), "OIDC discovery document is incomplete"' <<<"$oidc_response"
 echo "  ✓ Keycloak issuer and discovery endpoints match the local configuration"
 
 echo
