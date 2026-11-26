@@ -263,18 +263,17 @@ jobs:
           assert metric_result is not None, "Synthetic OTLP metric was not queryable in Prometheus"
 
           # Verify that the synthetic trace reached Jaeger.
-          trace_query = urllib.parse.urlencode({"traceID": trace_id})
           trace_result = None
           for _ in range(30):
               try:
-                  result = request(f"http://localhost:16686/api/traces?{trace_query}")
-                  if result.get("data"):
+                  result = request(f"http://localhost:16686/api/v3/traces/{trace_id}")
+                  if result.get("resourceSpans"):
                       trace_result = result
                       break
               except Exception:
                   pass
               time.sleep(2)
-          assert trace_result is not None, "Synthetic OTLP trace was not queryable in Jaeger by trace ID"
+          assert trace_result is not None, "Synthetic OTLP trace was not queryable in Jaeger's v3 trace API"
 
           # Verify Elasticsearch accepted and can return a synthetic log record.
           log_result = request("http://localhost:9200/compilecare-logs-ci-smoke/_search?q=correlation_id:ci-observability-smoke")
