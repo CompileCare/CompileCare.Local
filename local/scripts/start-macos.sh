@@ -70,6 +70,20 @@ if [[ "$NEW_LOCAL_ENV" == "true" ]]; then
   unset bootstrap_secret
 fi
 
+# Preserve existing bootstrap secrets; create one only if the old environment lacks one.
+bootstrap_current="$(sed -n 's/^PLATFORM_BOOTSTRAP_SECRET=//p' "$LOCAL/.env" | head -n 1)"
+if [[ -z "$bootstrap_current" || "$bootstrap_current" == replace-with-* ]]; then
+  bootstrap_secret="$(openssl rand -hex 32)"
+  if grep -q '^PLATFORM_BOOTSTRAP_SECRET=' "$LOCAL/.env"; then
+    sed -i '' "s|^PLATFORM_BOOTSTRAP_SECRET=.*|PLATFORM_BOOTSTRAP_SECRET=$bootstrap_secret|" "$LOCAL/.env"
+  else
+    printf '\nPLATFORM_BOOTSTRAP_SECRET=%s\n' "$bootstrap_secret" >> "$LOCAL/.env"
+  fi
+  echo "Generated a one-time local platform bootstrap secret: $bootstrap_secret"
+  echo "Save it securely; it is not printed again."
+  unset bootstrap_secret
+fi
+
 for key in KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD PLATFORM_BOOTSTRAP_SECRET; do
   current="$(sed -n "s/^$key=//p" "$LOCAL/.env" | head -n 1)"
   [[ -n "$current" && "$current" != replace-with-* ]] || fail "$key is missing or still a placeholder in local/.env. Set a private local value; do not reuse production credentials."
