@@ -267,8 +267,9 @@ jobs:
           for _ in range(30):
               try:
                   result = request(f"http://localhost:16686/api/v3/traces/{trace_id}")
-                  if result.get("resourceSpans"):
-                      trace_result = result
+                  trace_payload = result.get("result", {})
+                  if trace_payload.get("resourceSpans"):
+                      trace_result = trace_payload
                       break
               except Exception:
                   pass
