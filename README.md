@@ -27,6 +27,7 @@ The local Keycloak realm is imported automatically on first startup:
 - Authority/issuer: `http://keycloak.localhost:8082/realms/compilecare`
 - Web client: `compilecare-web` (public client, Authorization Code flow, PKCE S256)
 - API audience: `compilecare-api` (added to access tokens by the default `compilecare-api-audience` client scope)
+- User subject: the Keycloak `basic` default client scope supplies the `sub` claim in access tokens. The local reconciler verifies the `oidc-sub-mapper` is enabled for access tokens; this is required because the API binds persisted tenant membership to the validated issuer and subject.
 - Sign-in redirect URI: `http://localhost:8080/auth/callback`
 - Silent-renew redirect URI: `http://localhost:8080/auth/silent-callback`
 - Post-logout URI and Web origin: `http://localhost:8080`
@@ -82,6 +83,12 @@ bash local/scripts/verify-stack.sh
 ```
 
 The script checks all nine application and observability services, PostgreSQL readiness, Web/API/OpenAPI, Keycloak OIDC discovery, Prometheus, Jaeger, Elasticsearch, Kibana, Collector metrics and the API metrics endpoint. It never prints credentials or reads patient data. These checks are only an infrastructure smoke test; complete the authenticated acceptance checklist separately with synthetic records. Passing this script does not prove tenant authorization, patient workflows, telemetry delivery or production readiness.
+
+### Real OIDC and persisted multi-tenant acceptance (CI only)
+
+The Local GitHub Actions full-stack job additionally runs `local/scripts/verify-authenticated-tenancy.py` against the isolated nine-service Compose stack. It creates a temporary Keycloak client used only by CI, obtains real Keycloak-issued access tokens, bootstraps a platform operator, creates two tenants and persists different roles for the same synthetic identity. It then verifies API issuer/audience validation, tenant-specific permissions, hospital data isolation, cross-tenant membership mutation denial, membership revocation/reactivation and the current-user tenant-context response against PostgreSQL.
+
+This script requires `COMPILECARE_CI_ACCEPTANCE=1` and is deliberately restricted to the ephemeral CI environment. It uses no patient or billing records, does not change the checked-in `compilecare-web` PKCE client and must not be run against a persistent developer or production environment. The workflow removes its isolated Docker project and volumes after the job.
 
 ## Stop
 

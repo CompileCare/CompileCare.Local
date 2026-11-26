@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Idempotently reconcile the local Keycloak realm's OIDC client scopes.
 
-This updates only the CompileCare realm's profile/email/audience scopes and
-compilecare-web default-scope assignments. It never deletes a realm or volume.
+This reconciles the CompileCare realm's profile/email/audience scopes, the
+Keycloak 26.2+ basic subject scope and compilecare-web default-scope assignments.
+It never deletes a realm or volume.
 """
 from __future__ import annotations
 
@@ -61,6 +62,70 @@ def wait_for_keycloak(base_url: str, attempts: int = 45) -> None:
     raise RuntimeError("Keycloak did not become ready at " + base_url)
 
 
+def ensure_basic_subject_scope(
+    admin: KeycloakAdmin,
+    realm_name: str,
+    current_scopes: list[dict],
+) -> str:
+    """Ensure the built-in basic scope emits the validated user subject in access tokens."""
+    basic = next((scope for scope in current_scopes if scope.get("name") == "basic"), None)
+    if basic is None:
+        basic_spec = {
+            "name": "basic",
+            "description": "Basic OIDC claims required by CompileCare, including the access-token subject.",
+            "protocol": "openid-connect",
+            "attributes": {
+                "include.in.token.scope": "true",
+                "display.on.consent.screen": "false",
+            },
+        }
+        admin.request("POST", f"/admin/realms/{realm_name}/client-scopes", basic_spec)
+        current_scopes = admin.request("GET", f"/admin/realms/{realm_name}/client-scopes")
+        basic = next((scope for scope in current_scopes if scope.get("name") == "basic"), None)
+        if basic is None:
+            raise RuntimeError("Keycloak did not create the required basic client scope.")
+
+    scope_id = basic["id"]
+    mapper_path = f"/admin/realms/{realm_name}/client-scopes/{scope_id}/protocol-mappers/models"
+    mappers = admin.request("GET", mapper_path)
+    subject_mapper = next(
+        (mapper for mapper in mappers if mapper.get("protocolMapper") == "oidc-sub-mapper"),
+        None,
+    )
+    if subject_mapper is None:
+        admin.request(
+            "POST",
+            mapper_path,
+            {
+                "name": "compilecare-access-token-subject",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-sub-mapper",
+                "consentRequired": False,
+                "config": {"access.token.claim": "true"},
+            },
+        )
+    elif subject_mapper.get("config", {}).get("access.token.claim") != "true":
+        subject_mapper.setdefault("config", {})["access.token.claim"] = "true"
+        admin.request(
+            "PUT",
+            f"{mapper_path}/{subject_mapper['id']}",
+            subject_mapper,
+        )
+
+    # Re-read after mutation so the reconciliation verifies the mapper rather
+    # than assuming the Keycloak Admin REST write succeeded.
+    verified = admin.request("GET", mapper_path)
+    if not any(
+        mapper.get("protocolMapper") == "oidc-sub-mapper"
+        and mapper.get("config", {}).get("access.token.claim") == "true"
+        for mapper in verified
+    ):
+        raise RuntimeError(
+            "The Keycloak basic client scope does not expose the validated sub claim in access tokens."
+        )
+    return scope_id
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("env_file", type=Path)
@@ -101,9 +166,16 @@ def main() -> int:
 
     admin = KeycloakAdmin(args.base_url, token)
     current_scopes = admin.request("GET", f"/admin/realms/{realm_name}/client-scopes")
+    ensure_basic_subject_scope(admin, realm_name, current_scopes)
+    current_scopes = admin.request("GET", f"/admin/realms/{realm_name}/client-scopes")
     scope_ids = {scope["name"]: scope["id"] for scope in current_scopes}
 
     for name in desired_names:
+        # Keycloak's basic scope is a built-in OIDC scope, not a custom realm
+        # scope definition. Its subject mapper was verified above.
+        if name == "basic":
+            continue
+
         spec = scope_specs.get(name)
         if spec is None:
             raise RuntimeError(f"Realm definition is missing required default scope '{name}'.")
@@ -154,6 +226,7 @@ def main() -> int:
 
     print("CompileCare local Keycloak client reconciled: redirect URIs and web origins")
     print("CompileCare local Keycloak scopes reconciled: " + ", ".join(desired_names))
+    print("CompileCare access-token subject mapper verified in the basic scope.")
     return 0
 
 

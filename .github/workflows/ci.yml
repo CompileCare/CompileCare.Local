@@ -41,7 +41,7 @@ jobs:
           PY
       - name: Validate Keycloak realm import
         run: |
-          python -m py_compile local/scripts/configure-keycloak.py local/scripts/provision-kibana-data-view.py
+          python -m py_compile local/scripts/configure-keycloak.py local/scripts/provision-kibana-data-view.py local/scripts/verify-authenticated-tenancy.py
           python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
           python - <<'PY'
           import json
@@ -56,6 +56,7 @@ jobs:
           assert mapper["config"]["included.custom.audience"] == "compilecare-api"
           assert mapper["config"]["access.token.claim"] == "true"
           assert mapper["config"]["id.token.claim"] == "false"
+          assert "basic" in client["defaultClientScopes"]
           assert "compilecare-api-audience" in client["defaultClientScopes"]
           assert "profile" in client["defaultClientScopes"]
           assert "email" in client["defaultClientScopes"]
@@ -63,7 +64,8 @@ jobs:
           email = next(item for item in realm["clientScopes"] if item["name"] == "email")
           assert any(mapper["config"].get("claim.name") == "given_name" for mapper in profile["protocolMappers"])
           assert any(mapper["config"].get("claim.name") == "email" for mapper in email["protocolMappers"])
-          assert all(name in {scope["name"] for scope in realm["clientScopes"]} for name in client["defaultClientScopes"])
+          custom_scope_names = {scope["name"] for scope in realm["clientScopes"]}
+          assert all(name in custom_scope_names or name == "basic" for name in client["defaultClientScopes"])
           PY
       - name: Smoke-test Keycloak realm import in Docker
         run: |
@@ -168,7 +170,7 @@ jobs:
               f"http://keycloak.localhost:8082/admin/realms/compilecare/clients/{client_id}/default-client-scopes"
           ], text=True)
           default_names = {item["name"] for item in json.loads(defaults)}
-          assert {"profile", "email", "compilecare-api-audience"}.issubset(default_names), default_names
+          assert {"basic", "profile", "email", "compilecare-api-audience"}.issubset(default_names), default_names
           print("Keycloak profile/email claims and default API audience scope verified.")
           PY
           docker rm -f compilecare-keycloak-ci
@@ -482,6 +484,12 @@ jobs:
 
           echo "Running the merged nine-service verification, including real API-to-Jaeger/Npgsql and Collector metrics checks..."
           bash local/scripts/verify-stack.sh
+
+      - name: Verify real Keycloak-issued identities and persisted multi-tenant workflows
+        working-directory: CompileCare.Local
+        env:
+          COMPILECARE_CI_ACCEPTANCE: "1"
+        run: python3 local/scripts/verify-authenticated-tenancy.py
 
       - name: Capture full-stack diagnostics on failure
         if: failure()
