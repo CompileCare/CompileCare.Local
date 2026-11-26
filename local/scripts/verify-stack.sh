@@ -10,6 +10,7 @@ if [[ ! -f local/.env ]]; then
 fi
 
 compose=(docker compose --env-file local/.env -f local/docker-compose.yml)
+curl_local() { curl --fail --silent --show-error --connect-timeout 5 --max-time 15 "$@"; }
 
 echo "Checking Compose services..."
 running_services=$("${compose[@]}" ps --services --status running)
@@ -27,20 +28,20 @@ echo "Checking PostgreSQL readiness..."
 echo "  ✓ PostgreSQL accepts local readiness probes"
 
 echo "Checking Web endpoint..."
-curl --fail --silent --show-error http://localhost:8080/ >/dev/null
+curl_local http://localhost:8080/ >/dev/null
 echo "  ✓ Web responds on http://localhost:8080"
 
 echo "Checking API readiness..."
-api_response=$(curl --fail --silent --show-error http://localhost:8081/)
+api_response=$(curl_local http://localhost:8081/)
 python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("service") == "CompileCare.Api" and data.get("status") == "ready", "Unexpected API readiness payload"' <<<"$api_response"
 echo "  ✓ API reports ready"
 
 echo "Checking Development OpenAPI endpoint..."
-curl --fail --silent --show-error http://localhost:8081/openapi/v1.json >/dev/null
+curl_local http://localhost:8081/openapi/v1.json >/dev/null
 echo "  ✓ OpenAPI document is reachable"
 
 echo "Checking Keycloak OIDC discovery..."
-oidc_response=$(curl --fail --silent --show-error http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration)
+oidc_response=$(curl_local http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration)
 python3 -c 'import json,sys; data=json.load(sys.stdin); expected="http://keycloak.localhost:8082/realms/compilecare"; actual=data.get("issuer"); assert actual == expected, f"Unexpected OIDC issuer: {actual!r}"; assert data.get("authorization_endpoint") and data.get("token_endpoint") and data.get("jwks_uri"), "OIDC discovery document is incomplete"' <<<"$oidc_response"
 echo "  ✓ Keycloak issuer and discovery endpoints match the local configuration"
 
