@@ -7,7 +7,7 @@ This repository orchestrates the API, Web application, PostgreSQL and a preconfi
 ## Supported platforms
 
 - macOS: double-click `local/Start CompileCare.command` to clone/update the application checkouts, build images and start the full application plus observability stack.
-- Windows 10/11: double-click `local/Start CompileCare.bat` (the Windows launcher currently starts the base application stack; observability overlay parity is pending).
+- Windows 10/11: double-click `local/Start CompileCare.bat` to clone missing application checkouts, build images and start the same nine-service application and observability stack.
 
 ## Prerequisites
 
@@ -64,9 +64,9 @@ The launcher automatically removes the earlier standalone `compilecare-keycloak`
 
 The API runs in Development with migrations explicitly enabled by this local Compose stack. This opt-in must not be used in Staging or Production. Normal deployments retain the default migration behavior.
 
-## Local observability (included in the macOS one-click launcher)
+## Local observability (included in both one-click launchers)
 
-The macOS launcher starts the OpenTelemetry Collector, Prometheus, Jaeger, Elasticsearch and Kibana alongside the application. It pulls runtime images, builds the API and Web images, starts dependencies, reconciles the local Keycloak client and runs the full infrastructure/observability smoke checks. The API emits structured console and Elasticsearch logs, exposes `/metrics` and exports OpenTelemetry traces/metrics. For manual startup and signal troubleshooting, use the [local observability runbook](engineering/local-observability.md):
+Both launchers start the OpenTelemetry Collector, Prometheus, Jaeger, Elasticsearch and Kibana alongside the application. They validate the merged Compose configuration, pull runtime images, build the API and Web images, start dependencies, reconcile the local Keycloak client and wait for the application and observability endpoints. The Windows launcher also provisions the Kibana data view and checks PostgreSQL, API OpenAPI and API metrics readiness. The API emits structured console and Elasticsearch logs, exposes `/metrics` and exports OpenTelemetry traces/metrics. For manual startup and signal troubleshooting, use the [local observability runbook](engineering/local-observability.md):
 
 ```bash
 docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml up --build -d
