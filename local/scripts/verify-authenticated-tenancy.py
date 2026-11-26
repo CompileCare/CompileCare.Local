@@ -619,6 +619,25 @@ def run() -> None:
         api, "GET", "/api/v1/hospitals", tokens["shared"], tenant_b, 200
     )
 
+    # Hand the same persisted two-tenant identity to the real browser PKCE
+    # test through a runner-temporary file; never write credentials to the repo
+    # or emit them into the Actions log.
+    browser_user_file = os.environ.get("COMPILECARE_BROWSER_TEST_USER_FILE")
+    if not browser_user_file:
+        raise RuntimeError("COMPILECARE_BROWSER_TEST_USER_FILE must point to the runner-temporary browser credential file.")
+    browser_user_path = Path(browser_user_file)
+    browser_user_path.parent.mkdir(parents=True, exist_ok=True)
+    browser_user_path.write_text(
+        json.dumps(
+            {
+                "username": usernames["shared"],
+                "password": password,
+            }
+        ),
+        encoding="utf-8",
+    )
+    browser_user_path.chmod(0o600)
+
     print("Verified real Keycloak-issued tokens against CompileCare.Api issuer/audience validation.")
     print("Verified two PostgreSQL-persisted tenant memberships with different roles and permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
