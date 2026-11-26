@@ -19,7 +19,7 @@ Do not use production credentials or real patient data in local development.
 
 ## First launch
 
-The macOS launcher clones `CompileCare.Api` and `CompileCare.Web` beside this repository when missing. Existing checkouts must be clean and on `main`; the launcher fetches and fast-forward updates them only. It never force-resets, switches branches or discards local changes. On first run it creates `local/.env` with random local-only Keycloak/PostgreSQL credentials and a one-time platform bootstrap secret. It obtains NuGet package credentials from the authenticated GitHub CLI token. Secrets stay in ignored local files.
+Both launchers clone `CompileCare.Api` and `CompileCare.Web` beside this repository when missing. The macOS launcher additionally requires existing checkouts to be clean and on `main`, then fetches and fast-forward updates them only; it never force-resets, switches branches or discards local changes. On first run either launcher creates `local/.env` with random local-only Keycloak/PostgreSQL credentials and a one-time platform bootstrap secret. The macOS launcher obtains NuGet package credentials from the authenticated GitHub CLI token; the Windows launcher prompts for a GitHub username and a `read:packages` PAT and stores it in the ignored `local/.secrets/` directory. Secrets stay in ignored local files.
 
 The local Keycloak realm is imported automatically on first startup:
 
