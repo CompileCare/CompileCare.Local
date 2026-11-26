@@ -399,6 +399,21 @@ def create_hospital(api: Api, token: str, tenant_id: str, name: str, code: str) 
     return body["id"]
 
 
+def create_department(api: Api, token: str, tenant_id: str, hospital_id: str, name: str, code: str) -> str:
+    body = require_status(
+        f"Create department {code}",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_id}/departments",
+            token,
+            tenant_id,
+            {"name": name, "code": code},
+        ),
+        201,
+    )
+    return body["id"]
+
+
 def expect_api_status(
     action: str,
     api: Api,
@@ -503,6 +518,11 @@ def run() -> None:
         api, tokens["tenant-b-admin"], tenant_b, "CI Hospital B", f"B-{suffix.upper()}"
     )
 
+    department_b = create_department(
+        api, tokens["tenant-b-admin"], tenant_b, hospital_b,
+        "CI Department B", f"DB-{suffix.upper()}"
+    )
+
     # FacilityViewer is a facility-read-only role. Prove the API rejects
     # patient registration even when called directly with a valid Keycloak token.
     expect_api_status(
@@ -539,6 +559,25 @@ def run() -> None:
         tenant_b,
         403,
     )
+    expect_api_status(
+        "FacilityViewer cannot search department-scoped patients",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_b}/patients/departments/{department_b}/patients?page=1&pageSize=25",
+        tokens["shared"],
+        tenant_b,
+        403,
+    )
+    expect_api_status(
+        "FacilityViewer cannot read department-scoped patient identity details",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_b}/patients/departments/{department_b}/patients/00000000-0000-0000-0000-000000000000",
+        tokens["shared"],
+        tenant_b,
+        403,
+    )
+
     expect_api_status(
         "FacilityViewer cannot run patient duplicate review",
         api,
@@ -693,7 +732,7 @@ def run() -> None:
     print("Verified real Keycloak-issued tokens against CompileCare.Api issuer/audience validation.")
     print("Verified two PostgreSQL-persisted tenant memberships with different roles and permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
-    print("Verified FacilityViewer patient registration, search, identity detail and duplicate review are denied with HTTP 403.")
+    print("Verified FacilityViewer patient registration, search, identity detail, duplicate review and department-scoped patient reads are denied with HTTP 403.")
     print("No real patient or billing data was created.")
 
 
