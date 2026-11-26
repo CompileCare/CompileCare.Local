@@ -49,8 +49,10 @@ for key in KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD; do
     unset generated
   elif [[ -z "$current" || "$current" == replace-with-* ]]; then
     fail "$key is still a placeholder in an existing local/.env. Set a private value before starting; credentials are not rotated automatically because existing Docker volumes may already use them."
-  elif [[ "$current" == "ChangeThisLocalPassword123!" || "$current" == "compilecare-local-only" ]]; then
-    echo "WARNING: preserving legacy local $key to avoid desynchronizing an existing Docker volume. Rotate it only with a coordinated volume-aware procedure."
+  elif [[ "$key" == "KEYCLOAK_ADMIN_PASSWORD" && "$current" == "ChangeThisLocalPassword123!" ]]; then
+    fail "The existing Keycloak password is the known sample value. Change it in the running Keycloak admin console, then update local/.env before starting."
+  elif [[ "$current" == "compilecare-local-only" ]]; then
+    echo "WARNING: preserving legacy local $key to avoid desynchronizing an existing PostgreSQL volume. Rotate the database role password before updating local/.env."
   fi
 done
 chmod 600 "$LOCAL/.env"
