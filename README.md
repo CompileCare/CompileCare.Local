@@ -92,7 +92,7 @@ This script requires `COMPILECARE_CI_ACCEPTANCE=1` and is deliberately restricte
 
 ## Stop
 
-Use `local/Stop CompileCare.command` or `local/Stop CompileCare.bat`. The macOS stop command stops both the application and observability Compose overlay. PostgreSQL, Keycloak, Prometheus and Elasticsearch volumes are retained. To intentionally delete local data, use the explicit volume-removal command:
+Use `local/Stop CompileCare.command` or `local/Stop CompileCare.bat`. Both stop commands stop the application and observability Compose overlay. PostgreSQL, Keycloak, Prometheus and Elasticsearch volumes are retained. To intentionally delete local data, use the explicit volume-removal command:
 
 ```bash
 docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes
