@@ -265,7 +265,6 @@ def user_access_token(username: str, password: str, expected_issuer: str) -> tup
             "client_id": CI_CLIENT_ID,
             "username": username,
             "password": password,
-            "scope": "openid profile email",
         },
     )
     body = require_status(f"Obtain real Keycloak token for {username}", result, 200)
