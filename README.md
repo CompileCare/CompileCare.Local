@@ -27,6 +27,7 @@ The local Keycloak realm is imported automatically on first startup:
 - Authority/issuer: `http://keycloak.localhost:8082/realms/compilecare`
 - Web client: `compilecare-web` (public client, Authorization Code flow, PKCE S256)
 - API audience: `compilecare-api` (added to access tokens by the default `compilecare-api-audience` client scope)
+- User subject: the Keycloak `basic` default client scope supplies the `sub` claim in access tokens. The local reconciler verifies the `oidc-sub-mapper` is enabled for access tokens; this is required because the API binds persisted tenant membership to the validated issuer and subject.
 - Sign-in redirect URI: `http://localhost:8080/auth/callback`
 - Silent-renew redirect URI: `http://localhost:8080/auth/silent-callback`
 - Post-logout URI and Web origin: `http://localhost:8080`
