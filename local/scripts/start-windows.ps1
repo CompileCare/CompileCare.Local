@@ -60,8 +60,10 @@ foreach ($key in @("KEYCLOAK_ADMIN_PASSWORD", "POSTGRES_PASSWORD")) {
     $secret = $null
   } elseif ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-")) {
     throw "$key is still a placeholder in an existing local/.env. Set a private value before starting; credentials are not rotated automatically because existing Docker volumes may already use them."
-  } elseif ($value -eq "ChangeThisLocalPassword123!" -or $value -eq "compilecare-local-only") {
-    Write-Warning "Preserving legacy local $key to avoid desynchronizing an existing Docker volume. Rotate it only with a coordinated volume-aware procedure."
+  } elseif ($key -eq "KEYCLOAK_ADMIN_PASSWORD" -and $value -eq "ChangeThisLocalPassword123!") {
+    throw "The existing Keycloak password is the known sample value. Change it in the running Keycloak admin console, then update local/.env before starting."
+  } elseif ($value -eq "compilecare-local-only") {
+    Write-Warning "Preserving legacy local $key to avoid desynchronizing an existing PostgreSQL volume. Rotate the database role password before updating local/.env."
   }
 }
 
