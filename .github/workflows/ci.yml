@@ -20,6 +20,23 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("local/scripts/start-windows.ps1", [ref]$tokens, [ref]$errors) > $null
           if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+      - name: Validate local secret placeholders fail closed
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          env = Path("local/.env.example").read_text(encoding="utf-8")
+          compose = Path("local/docker-compose.yml").read_text(encoding="utf-8")
+          assert "KEYCLOAK_ADMIN_PASSWORD=replace-with-a-random-local-secret" in env
+          assert "POSTGRES_PASSWORD=replace-with-a-random-local-secret" in env
+          assert "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in local/.env}" in compose
+          assert "POSTGRES_PASSWORD:-compilecare-local-only" not in compose
+          assert "Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in local/.env}" in compose
+          mac = Path("local/scripts/start-macos.sh").read_text(encoding="utf-8")
+          windows = Path("local/scripts/start-windows.ps1").read_text(encoding="utf-8")
+          assert 'NEW_LOCAL_ENV=true' in mac and '"$NEW_LOCAL_ENV" == "true"' in mac
+          assert '$NewLocalEnv = $true' in windows and '$NewLocalEnv -and' in windows
+          print("Local secrets use explicit placeholders and Compose refuses password fallbacks.")
+          PY
       - name: Validate Keycloak realm import
         run: |
           python -m py_compile local/scripts/configure-keycloak.py

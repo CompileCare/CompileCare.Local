@@ -16,8 +16,10 @@ if [[ ! -d "$API/.git" ]]; then gh repo clone CompileCare/CompileCare.Api "$API"
 if [[ ! -d "$WEB/.git" ]]; then gh repo clone CompileCare/CompileCare.Web "$WEB" || fail "Unable to clone CompileCare.Web."; fi
 export COMPILECARE_API_PATH="$API" COMPILECARE_WEB_PATH="$WEB"
 
+NEW_LOCAL_ENV=false
 if [[ ! -f "$LOCAL/.env" ]]; then
   cp "$LOCAL/.env.example" "$LOCAL/.env"
+  NEW_LOCAL_ENV=true
   read -r -p "Development OIDC Authority URL [http://keycloak.localhost:8082/realms/compilecare]: " authority
   authority="${authority:-http://keycloak.localhost:8082/realms/compilecare}"
   read -r -p "API Audience [compilecare-api]: " audience
@@ -36,6 +38,24 @@ fi
 if grep -qx 'OIDC_SCOPE=openid' "$LOCAL/.env"; then
   sed -i '' 's|^OIDC_SCOPE=openid$|OIDC_SCOPE=openid profile|' "$LOCAL/.env"
 fi
+
+# Generate unique local-only credentials instead of relying on checked-in sample passwords.
+command -v openssl >/dev/null || fail "OpenSSL is required to generate local-only credentials."
+for key in KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD; do
+  current="$(sed -n "s/^${key}=//p" "$LOCAL/.env" | head -n 1)"
+  if [[ "$NEW_LOCAL_ENV" == "true" && ( -z "$current" || "$current" == replace-with-* ) ]]; then
+    generated="$(openssl rand -hex 32)"
+    sed -i '' "s|^${key}=.*|${key}=${generated}|" "$LOCAL/.env"
+    unset generated
+  elif [[ -z "$current" || "$current" == replace-with-* ]]; then
+    fail "$key is still a placeholder in an existing local/.env. Set a private value before starting; credentials are not rotated automatically because existing Docker volumes may already use them."
+  elif [[ "$key" == "KEYCLOAK_ADMIN_PASSWORD" && "$current" == "ChangeThisLocalPassword123!" ]]; then
+    fail "The existing Keycloak password is the known sample value. Change it in the running Keycloak admin console, then update local/.env before starting."
+  elif [[ "$current" == "compilecare-local-only" ]]; then
+    echo "WARNING: preserving legacy local $key to avoid desynchronizing an existing PostgreSQL volume. Rotate the database role password before updating local/.env."
+  fi
+done
+chmod 600 "$LOCAL/.env"
 
 # Generate a one-time local bootstrap secret when the example value is still present.
 if ! grep -q '^PLATFORM_BOOTSTRAP_SECRET=.' "$LOCAL/.env" || grep -q '^PLATFORM_BOOTSTRAP_SECRET=replace-with-' "$LOCAL/.env"; then

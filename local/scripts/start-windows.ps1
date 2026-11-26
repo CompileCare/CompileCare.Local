@@ -17,7 +17,9 @@ $env:COMPILECARE_API_PATH = $Api
 $env:COMPILECARE_WEB_PATH = $Web
 
 $EnvFile = Join-Path $Local ".env"
+$NewLocalEnv = $false
 if (-not (Test-Path $EnvFile)) {
+  $NewLocalEnv = $true
   Copy-Item (Join-Path $Local ".env.example") $EnvFile
   $authority = Read-Host "Development OIDC Authority URL [http://keycloak.localhost:8082/realms/compilecare]"
   if ([string]::IsNullOrWhiteSpace($authority)) { $authority = "http://keycloak.localhost:8082/realms/compilecare" }
@@ -38,6 +40,31 @@ if ($envLines -contains "OIDC_SCOPE=openid") {
   $envContent = Get-Content $EnvFile -Raw
   $envContent = $envContent -replace '(?m)^OIDC_SCOPE=openid$', 'OIDC_SCOPE=openid profile'
   Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+}
+
+function New-LocalSecret {
+  $bytes = New-Object byte[] 32
+  $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $generator.GetBytes($bytes) } finally { $generator.Dispose() }
+  return [BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+}
+$envContent = Get-Content $EnvFile -Raw
+foreach ($key in @("KEYCLOAK_ADMIN_PASSWORD", "POSTGRES_PASSWORD")) {
+  $line = Get-Content $EnvFile | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
+  $value = if ($line) { $line.Substring($key.Length + 1) } else { "" }
+  if ($NewLocalEnv -and ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-"))) {
+    $secret = New-LocalSecret
+    $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$secret"
+    Set-Content -Path $EnvFile -Value $envContent -NoNewline -Encoding ascii
+    $envContent = Get-Content $EnvFile -Raw
+    $secret = $null
+  } elseif ([string]::IsNullOrWhiteSpace($value) -or $value.StartsWith("replace-with-")) {
+    throw "$key is still a placeholder in an existing local/.env. Set a private value before starting; credentials are not rotated automatically because existing Docker volumes may already use them."
+  } elseif ($key -eq "KEYCLOAK_ADMIN_PASSWORD" -and $value -eq "ChangeThisLocalPassword123!") {
+    throw "The existing Keycloak password is the known sample value. Change it in the running Keycloak admin console, then update local/.env before starting."
+  } elseif ($value -eq "compilecare-local-only") {
+    Write-Warning "Preserving legacy local $key to avoid desynchronizing an existing PostgreSQL volume. Rotate the database role password before updating local/.env."
+  }
 }
 
 $bootstrapLine = Get-Content $EnvFile | Where-Object { $_ -match '^PLATFORM_BOOTSTRAP_SECRET=' } | Select-Object -First 1

@@ -71,7 +71,7 @@ def main() -> int:
     env = read_env(args.env_file)
     username = os.environ.get("KEYCLOAK_ADMIN", env.get("KEYCLOAK_ADMIN", "admin"))
     password = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", env.get("KEYCLOAK_ADMIN_PASSWORD", ""))
-    if not password or password.startswith("ChangeThis"):
+    if not password or password.startswith(("ChangeThis", "replace-with-")):
         raise RuntimeError("Set a private KEYCLOAK_ADMIN_PASSWORD in local/.env before configuring the realm.")
 
     realm_spec = json.loads(args.realm_file.read_text(encoding="utf-8"))
