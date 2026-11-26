@@ -521,6 +521,40 @@ def run() -> None:
         },
     )
 
+    expect_api_status(
+        "FacilityViewer cannot search patients",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_b}/patients?page=1&pageSize=25",
+        tokens["shared"],
+        tenant_b,
+        403,
+    )
+    expect_api_status(
+        "FacilityViewer cannot read patient identity details",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_b}/patients/00000000-0000-0000-0000-000000000000",
+        tokens["shared"],
+        tenant_b,
+        403,
+    )
+    expect_api_status(
+        "FacilityViewer cannot run patient duplicate review",
+        api,
+        "POST",
+        f"/api/v1/hospitals/{hospital_b}/patients/duplicate-candidates",
+        tokens["shared"],
+        tenant_b,
+        403,
+        {
+            "givenName": "CI Forbidden",
+            "middleName": None,
+            "familyName": "FacilityViewer",
+            "dateOfBirth": "1990-01-02",
+        },
+    )
+
     contexts = require_status(
         "List current user's active tenant contexts",
         api.call("GET", "/api/v1/me/tenant-contexts?page=1&pageSize=50", tokens["shared"]),
@@ -659,6 +693,7 @@ def run() -> None:
     print("Verified real Keycloak-issued tokens against CompileCare.Api issuer/audience validation.")
     print("Verified two PostgreSQL-persisted tenant memberships with different roles and permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
+    print("Verified FacilityViewer patient registration, search, identity detail and duplicate review are denied with HTTP 403.")
     print("No real patient or billing data was created.")
 
 
