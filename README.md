@@ -75,7 +75,7 @@ Dashboards: Kibana at http://localhost:5601 (logs), Prometheus at http://localho
 
 ## Verify the local stack
 
-After the services are running, execute the infrastructure smoke checks:
+After the one-click launcher finishes, execute the same infrastructure and observability smoke checks independently if needed:
 
 ```bash
 bash local/scripts/verify-stack.sh
