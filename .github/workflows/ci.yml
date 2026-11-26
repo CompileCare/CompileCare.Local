@@ -349,7 +349,6 @@ jobs:
     timeout-minutes: 35
     permissions:
       contents: read
-      packages: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -367,11 +366,51 @@ jobs:
           ref: main
           path: CompileCare.Web
 
-      - name: Prepare isolated synthetic local environment and NuGet credentials
+      - uses: actions/checkout@v4
+        with:
+          repository: CompileCare/CompileCare.Observability
+          ref: main
+          path: CompileCare.Observability
+
+      - name: Install .NET SDK for the shared observability projects
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Pack shared observability libraries into an ephemeral local NuGet feed
+        working-directory: CompileCare.Observability
+        run: |
+          set -Eeuo pipefail
+          feed="$GITHUB_WORKSPACE/CompileCare.Api/.ci-nuget"
+          mkdir -p "$feed"
+          dotnet pack src/CompileCare.Observability/CompileCare.Observability.csproj \
+            --configuration Release -p:Version=1.0.1 -o "$feed"
+          dotnet pack src/CompileCare.Observability.AspNetCore/CompileCare.Observability.AspNetCore.csproj \
+            --configuration Release -p:Version=1.0.1 -o "$feed"
+          test -s "$feed/CompileCare.Observability.1.0.1.nupkg"
+          test -s "$feed/CompileCare.Observability.AspNetCore.1.0.1.nupkg"
+          cat > "$GITHUB_WORKSPACE/CompileCare.Api/NuGet.Config" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="compilecare-ci" value=".ci-nuget" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="compilecare-ci">
+                <package pattern="CompileCare.*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+
+      - name: Prepare isolated synthetic local environment and non-credential Docker secret
         working-directory: CompileCare.Local
         shell: bash
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
           cp local/.env.example local/.env
@@ -395,7 +434,10 @@ jobs:
           PY
           mkdir -p local/.secrets
           umask 077
-          printf 'Username=%s;Password=%s;ValidAuthenticationTypes=Basic' "$GITHUB_ACTOR" "$GH_PACKAGES_TOKEN" \
+          # The API Dockerfile always mounts this BuildKit secret. In this CI job,
+          # CompileCare.* packages are restored from .ci-nuget, so no GitHub token
+          # or private package credential is needed or supplied.
+          printf 'Username=ci;Password=not-used;ValidAuthenticationTypes=Basic' \
             > local/.secrets/nuget-source-credentials
           echo "COMPILECARE_API_PATH=$GITHUB_WORKSPACE/CompileCare.Api" >> "$GITHUB_ENV"
           echo "COMPILECARE_WEB_PATH=$GITHUB_WORKSPACE/CompileCare.Web" >> "$GITHUB_ENV"
@@ -406,8 +448,6 @@ jobs:
       - name: Build and run the complete nine-service Compose stack
         working-directory: CompileCare.Local
         shell: bash
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
           compose=(docker compose --project-name compilecare-fullstack-ci --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml)
