@@ -885,7 +885,30 @@ def run() -> None:
     )
     browser_user_path.chmod(0o600)
 
-    print("Prepared isolated credentials for all persisted-role real OIDC browser acceptance cases.")
+    browser_manifest = json.loads(browser_user_path.read_text(encoding="utf-8"))
+    required_browser_roles = {
+        "platform",
+        "shared",
+        "facility-manager",
+        "patient-registrar",
+        "clinical-user",
+    }
+    configured_browser_roles = browser_manifest.get("users", {})
+    if not required_browser_roles.issubset(configured_browser_roles):
+        raise AssertionError(
+            "The ephemeral browser credential manifest is missing one or more persisted-role identities."
+        )
+    for role_name in required_browser_roles:
+        role_credentials = configured_browser_roles[role_name]
+        if not role_credentials.get("username") or not role_credentials.get("password"):
+            raise AssertionError(f"The ephemeral browser identity for {role_name} is incomplete.")
+    if not all(
+        browser_manifest.get(name)
+        for name in ("tenantAId", "tenantBId", "hospitalAId", "hospitalBId", "departmentAId")
+    ):
+        raise AssertionError("The ephemeral browser manifest is missing its synthetic tenant or organization IDs.")
+
+    print("Prepared and validated isolated credentials for all persisted-role real OIDC browser acceptance cases.")
 
     print("Verified real Keycloak-issued tokens against HeapCare.Api issuer/audience validation.")
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
