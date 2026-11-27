@@ -129,7 +129,7 @@ def ensure_basic_subject_scope(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("env_file", type=Path)
-    parser.add_argument("--realm-file", type=Path, default=Path(__file__).resolve().parents[1] / "keycloak" / "heapcare-realm.json")
+    parser.add_argument("--realm-file", type=Path, default=Path(__file__).resolve().parents[1] / "keycloak" / "compilecare-realm.json")
     parser.add_argument("--base-url", default="http://localhost:8082")
     args = parser.parse_args()
 
