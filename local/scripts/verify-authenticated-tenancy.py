@@ -465,7 +465,7 @@ def run() -> None:
     password = secrets.token_urlsafe(24)
     usernames = {
         name: f"heapcare-ci-{name}-{suffix}"
-        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared")
+        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-manager", "patient-registrar", "clinical-user")
     }
     subjects: dict[str, str] = {}
     tokens: dict[str, str] = {}
@@ -510,6 +510,21 @@ def run() -> None:
     membership_b = create_membership(
         api, tokens["tenant-b-admin"], tenant_b, issuer, subjects["shared"], "FacilityViewer"
     )
+
+    # Provision one real Keycloak identity for each remaining persisted tenant
+    # role. These memberships are isolated to the synthetic CI tenant and are
+    # used to verify the API's server-derived permission contexts end to end.
+    role_memberships = {
+        "FacilityManager": create_membership(
+            api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["facility-manager"], "FacilityManager"
+        ),
+        "PatientRegistrar": create_membership(
+            api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["patient-registrar"], "PatientRegistrar"
+        ),
+        "ClinicalUser": create_membership(
+            api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["clinical-user"], "ClinicalUser"
+        ),
+    }
 
     hospital_a = create_hospital(
         api, tokens["shared"], tenant_a, "CI Hospital A", f"A-{suffix.upper()}"
@@ -612,6 +627,62 @@ def run() -> None:
         raise AssertionError("HospitalAdmin permissions were not derived from persisted membership.")
     if "facility.write" in context_b.get("permissions", []) or "facility.delete" in context_b.get("permissions", []):
         raise AssertionError("External or cross-tenant claims escalated the FacilityViewer permissions.")
+
+    # Validate every persisted tenant role using tokens issued by the real
+    # Keycloak server. The API must derive the exact expected grants from the
+    # persisted membership; token claims are not an authorization source.
+    expected_role_permissions = {
+        "HospitalAdmin": {"facility.read", "facility.write", "facility.delete", "patient.read", "patient.register", "appointment.manage", "audit.read"},
+        "FacilityManager": {"facility.read", "facility.write"},
+        "FacilityViewer": {"facility.read"},
+        "PatientRegistrar": {"facility.read", "patient.read", "patient.register", "patient.identifier.read", "appointment.manage", "queue.manage", "billing.invoice.manage", "billing.payment.manage"},
+        "ClinicalUser": {"facility.read", "patient.identity.read", "queue.read", "encounter.read", "encounter.manage", "encounter.sign", "encounter.amend"},
+    }
+    role_tokens = {
+        "HospitalAdmin": tokens["shared"],
+        "FacilityManager": tokens["facility-manager"],
+        "PatientRegistrar": tokens["patient-registrar"],
+        "ClinicalUser": tokens["clinical-user"],
+    }
+    for role, role_token in role_tokens.items():
+        role_contexts = require_status(
+            f"Read persisted {role} tenant context",
+            api.call("GET", "/api/v1/me/tenant-contexts?page=1&pageSize=50", role_token),
+            200,
+        )
+        role_items = role_contexts.get("items", [])
+        context = next((item for item in role_items if item.get("tenantId") == tenant_a), None)
+        if context is None or context.get("role") != role:
+            raise AssertionError(f"Expected persisted {role} context for tenant A; received {role_contexts!r}")
+        permissions = set(context.get("permissions", []))
+        missing = expected_role_permissions[role] - permissions
+        if missing:
+            raise AssertionError(f"{role} is missing expected persisted permissions: {sorted(missing)!r}")
+        if role != "HospitalAdmin" and "facility.delete" in permissions:
+            raise AssertionError(f"{role} unexpectedly received facility.delete.")
+        expect_api_status(
+            f"{role} can read the tenant-scoped hospital collection",
+            api, "GET", "/api/v1/hospitals", role_token, tenant_a, 200
+        )
+
+    # The FacilityManager may maintain facilities but must not read patient
+    # records; PatientRegistrar may read patients; ClinicalUser receives only
+    # patient identity access for encounter workflows, not general search.
+    expect_api_status(
+        "FacilityManager cannot search patient records", api, "GET",
+        f"/api/v1/hospitals/{hospital_a}/patients?page=1&pageSize=25",
+        tokens["facility-manager"], tenant_a, 403
+    )
+    expect_api_status(
+        "PatientRegistrar can search patient records", api, "GET",
+        f"/api/v1/hospitals/{hospital_a}/patients?page=1&pageSize=25",
+        tokens["patient-registrar"], tenant_a, 200
+    )
+    expect_api_status(
+        "ClinicalUser cannot search patient records", api, "GET",
+        f"/api/v1/hospitals/{hospital_a}/patients?page=1&pageSize=25",
+        tokens["clinical-user"], tenant_a, 403
+    )
 
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
@@ -730,9 +801,9 @@ def run() -> None:
     browser_user_path.chmod(0o600)
 
     print("Verified real Keycloak-issued tokens against HeapCare.Api issuer/audience validation.")
-    print("Verified two PostgreSQL-persisted tenant memberships with different roles and permissions.")
+    print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
-    print("Verified FacilityViewer patient registration, search, identity detail, duplicate review and department-scoped patient reads are denied with HTTP 403.")
+    print("Verified FacilityViewer and ClinicalUser/FacilityManager patient-search denials and PatientRegistrar patient-search access.")
     print("No real patient or billing data was created.")
 
 
