@@ -524,6 +524,127 @@ jobs:
           HEAPCARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/heapcare-browser-user.json
         run: python3 local/scripts/verify-authenticated-tenancy.py
 
+      - name: Smoke-test PostgreSQL logical backup and isolated restore
+        working-directory: HeapCare.Local
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --project-name heapcare-fullstack-ci --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml)
+          backup="$RUNNER_TEMP/heapcare-postgres-ci.dump"
+          container_backup="/tmp/heapcare-postgres-ci.dump"
+
+          cleanup() {
+            "${compose[@]}" exec -T postgres sh -ec 'PGPASSWORD="$POSTGRES_PASSWORD" dropdb --if-exists --username="$POSTGRES_USER" heapcare_ci_restore_verify' >/dev/null 2>&1 || true
+            "${compose[@]}" exec -T postgres rm -f "$container_backup" >/dev/null 2>&1 || true
+            rm -f "$backup"
+          }
+          trap cleanup EXIT
+
+          echo "Creating a custom-format logical backup of the isolated CI database..."
+          "${compose[@]}" exec -T postgres sh -ec \
+            'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump --no-owner --no-acl --format=custom --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' \
+            > "$backup"
+          test -s "$backup"
+          pg_restore --list "$backup" > "$RUNNER_TEMP/heapcare-postgres-ci.dump-list"
+          test -s "$RUNNER_TEMP/heapcare-postgres-ci.dump-list"
+
+          echo "Creating a separate empty restore target..."
+          "${compose[@]}" exec -T postgres sh -ec \
+            'PGPASSWORD="$POSTGRES_PASSWORD" createdb --username="$POSTGRES_USER" --template=template0 heapcare_ci_restore_verify'
+          "${compose[@]}" cp "$backup" "postgres:$container_backup"
+
+          echo "Restoring the archive into the isolated target database..."
+          "${compose[@]}" exec -T postgres sh -ec \
+            'PGPASSWORD="$POSTGRES_PASSWORD" pg_restore --no-owner --no-acl --exit-on-error --username="$POSTGRES_USER" --dbname=heapcare_ci_restore_verify /tmp/heapcare-postgres-ci.dump'
+
+          python3 - <<'PY'
+          import json
+          import subprocess
+
+          compose = [
+              "docker", "compose", "--project-name", "heapcare-fullstack-ci",
+              "--env-file", "local/.env",
+              "-f", "local/docker-compose.yml",
+              "-f", "local/docker-compose.observability.yml",
+          ]
+          count_sql = r"""
+          CREATE TEMP TABLE _heapcare_ci_row_counts (
+              table_schema text NOT NULL,
+              table_name text NOT NULL,
+              row_count bigint NOT NULL
+          );
+          DO $block$
+          DECLARE
+              item record;
+              current_count bigint;
+          BEGIN
+              FOR item IN
+                  SELECT table_schema, table_name
+                  FROM information_schema.tables
+                  WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+                    AND table_type = 'BASE TABLE'
+                  ORDER BY table_schema, table_name
+              LOOP
+                  EXECUTE format(
+                      'SELECT count(*) FROM %I.%I',
+                      item.table_schema,
+                      item.table_name
+                  ) INTO current_count;
+                  INSERT INTO _heapcare_ci_row_counts
+                  VALUES (item.table_schema, item.table_name, current_count);
+              END LOOP;
+          END
+          $block$;
+          SELECT COALESCE(
+              jsonb_object_agg(table_schema || '.' || table_name, row_count),
+              '{}'::jsonb
+          )
+          FROM _heapcare_ci_row_counts;
+          """
+
+          def table_counts(database: str) -> dict[str, int]:
+              command = compose + [
+                  "exec", "-T", "postgres", "sh", "-ec",
+                  'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 '
+                  '-U "$POSTGRES_USER" -d "$1" -Atqc "$2"',
+                  "sh", database, count_sql,
+              ]
+              result = subprocess.run(
+                  command,
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              )
+              lines = [line for line in result.stdout.splitlines() if line.strip()]
+              if not lines:
+                  raise RuntimeError(f"PostgreSQL returned no table counts for {database}.")
+              return json.loads(lines[-1])
+
+          source = table_counts("compilecare")
+          restored = table_counts("heapcare_ci_restore_verify")
+          if not source:
+              raise AssertionError("The source database contains no application tables to verify.")
+          if source != restored:
+              missing = sorted(set(source) - set(restored))
+              unexpected = sorted(set(restored) - set(source))
+              changed = sorted(
+                  name for name in set(source) & set(restored)
+                  if source[name] != restored[name]
+              )
+              raise AssertionError(
+                  "Logical restore mismatch: "
+                  f"missing_tables={missing}, unexpected_tables={unexpected}, "
+                  f"row_count_mismatches={changed}"
+              )
+
+          print(
+              "PostgreSQL logical backup/restore verified: "
+              f"{len(source)} application tables restored with matching row counts."
+          )
+          PY
+
+          echo "The isolated restore check passed. This is a logical dump/restore smoke test, not provider PITR or a production disaster-recovery drill."
+
       - name: Install Node.js for real browser acceptance
         uses: actions/setup-node@v4
         with:
