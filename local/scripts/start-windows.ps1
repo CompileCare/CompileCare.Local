@@ -9,10 +9,16 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "Install GitHub
 gh auth status *> $null
 if ($LASTEXITCODE -ne 0) { throw "Authenticate with gh auth login." }
 
-$Api = Join-Path (Split-Path $Root -Parent) "CompileCare.Api"
-$Web = Join-Path (Split-Path $Root -Parent) "CompileCare.Web"
+$Api = Join-Path (Split-Path $Root -Parent) "HeapCare.Api"
+$LegacyApi = Join-Path (Split-Path $Root -Parent) "CompileCare.Api"
+if (-not (Test-Path (Join-Path $Api ".git")) -and (Test-Path (Join-Path $LegacyApi ".git"))) { $Api = $LegacyApi }
+$Web = Join-Path (Split-Path $Root -Parent) "HeapCare.Web"
+$LegacyWeb = Join-Path (Split-Path $Root -Parent) "CompileCare.Web"
+if (-not (Test-Path (Join-Path $Web ".git")) -and (Test-Path (Join-Path $LegacyWeb ".git"))) { $Web = $LegacyWeb }
 if (-not (Test-Path (Join-Path $Api ".git"))) { gh repo clone CompileCare/CompileCare.Api $Api; if ($LASTEXITCODE -ne 0) { throw "Could not clone CompileCare.Api." } }
 if (-not (Test-Path (Join-Path $Web ".git"))) { gh repo clone CompileCare/CompileCare.Web $Web; if ($LASTEXITCODE -ne 0) { throw "Could not clone CompileCare.Web." } }
+$env:HEAPCARE_API_PATH = $Api
+$env:HEAPCARE_WEB_PATH = $Web
 $env:COMPILECARE_API_PATH = $Api
 $env:COMPILECARE_WEB_PATH = $Web
 
@@ -125,7 +131,7 @@ if ($LASTEXITCODE -ne 0) { throw "Could not pull one or more runtime images." }
 & docker compose @ComposeArgs build --pull api web
 if ($LASTEXITCODE -ne 0) { throw "API/Web Docker build failed. Inspect local logs." }
 
-Write-Host "Starting CompileCare and all observability services..."
+Write-Host "Starting HeapCare and all observability services..."
 & docker compose @ComposeArgs up -d --remove-orphans
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed. Inspect local logs." }
 
@@ -177,7 +183,7 @@ Write-Host "Provisioning the CompileCare Logs Kibana data view..."
 if ($LASTEXITCODE -ne 0) { throw "Could not provision the Kibana data view." }
 
 Write-Host ""
-Write-Host "CompileCare is ready with the full nine-service observability stack."
+Write-Host "HeapCare is ready with the full nine-service observability stack."
 Write-Host "  Workspace:     http://localhost:8080"
 Write-Host "  API/OpenAPI:   http://localhost:8081/openapi/v1.json"
 Write-Host "  Keycloak:      http://keycloak.localhost:8082"
