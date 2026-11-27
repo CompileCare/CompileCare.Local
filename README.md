@@ -1,13 +1,15 @@
-# CompileCare Local
+# HeapCare Local
 
-One-click local development environment for the CompileCare hospital platform.
+> **Brand migration status:** HeapCare branding and local launcher names are updated. Existing GitHub repository paths, OIDC realm/client IDs, database names, connection-string keys, persistent Docker volume names and environment-variable names are intentionally retained for compatibility until their coordinated migration is verified.
+
+One-click local development environment for the HeapCare hospital platform.
 
 This repository orchestrates the API, Web application, PostgreSQL and a preconfigured local Keycloak identity provider in Docker Compose. Hospital domain code remains in the API and Web repositories.
 
 ## Supported platforms
 
-- macOS: double-click `local/Start CompileCare.command` to clone/update the application checkouts, build images and start the full application plus observability stack.
-- Windows 10/11: double-click `local/Start CompileCare.bat` to clone missing application checkouts, build images and start the same nine-service application and observability stack.
+- macOS: double-click `local/Start HeapCare.command` to clone/update the application checkouts, build images and start the full application plus observability stack.
+- Windows 10/11: double-click `local/Start HeapCare.bat` to clone missing application checkouts, build images and start the same nine-service application and observability stack.
 
 ## Prerequisites
 
@@ -92,7 +94,7 @@ This script requires `COMPILECARE_CI_ACCEPTANCE=1` and is deliberately restricte
 
 ## Stop
 
-Use `local/Stop CompileCare.command` or `local/Stop CompileCare.bat`. Both stop commands stop the application and observability Compose overlay. PostgreSQL, Keycloak, Prometheus and Elasticsearch volumes are retained. To intentionally delete local data, use the explicit volume-removal command:
+Use `local/Stop HeapCare.command` or `local/Stop HeapCare.bat`. Both stop commands stop the application and observability Compose overlay. PostgreSQL, Keycloak, Prometheus and Elasticsearch volumes are retained. To intentionally delete local data, use the explicit volume-removal command:
 
 ```bash
 docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes
@@ -119,3 +121,8 @@ If you override `OIDC_AUTHORITY` or the Web API URL for a different local topolo
 The pull-request workflow's Full nine-service Docker stack and API telemetry verification job checks the current main branches of CompileCare.Api, CompileCare.Web and CompileCare.Observability against this local Compose topology. It starts the nine-service stack with ephemeral credentials, validates infrastructure/observability, exercises real Keycloak-issued identities and persisted multi-tenant authorization, and runs the real OIDC Authorization Code + PKCE browser suite. See [the 2026-11-27 verification plan](qa/full-stack-verification-2026-11-27.md) for the scope and acceptance boundary.
 
 A passing hosted CI run is evidence for the exact repository SHAs checked out by that run. It is not a substitute for running the one-click launcher on the target developer Mac/Windows machines, manual accessibility/screen-reader review, provider-native production backup/PITR, or pilot sign-off.
+
+
+## HeapCare identity migration
+
+HeapCare is the product-facing brand. The local Compose project name, PostgreSQL database/role, Keycloak realm (`compilecare`), OIDC client/audience IDs, connection-string key, persistent volume names and existing `COMPILECARE_*` launcher variables are intentionally retained as compatibility contracts in this phase. Existing local Docker volumes and Keycloak users must not be deleted or silently recreated. A future identity-provider migration must provision the HeapCare realm and clients, migrate users/roles, verify issuer/audience and callback behavior, and only then retire the legacy realm. The current GitHub organization and repository names also remain unchanged until the administrative rename is completed.

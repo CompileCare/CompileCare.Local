@@ -3,11 +3,11 @@ global:
   evaluation_interval: 10s
 
 scrape_configs:
-  - job_name: compilecare-api
+  - job_name: heapcare-api
     metrics_path: /metrics
     static_configs:
       - targets: ["api:8080"]
 
-  - job_name: compilecare-otel-collector
+  - job_name: heapcare-otel-collector
     static_configs:
       - targets: ["otel-collector:8889"]
