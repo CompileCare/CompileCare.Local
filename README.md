@@ -141,3 +141,9 @@ The merged HeapCare.Web real-Keycloak suite now extends the PatientRegistrar bro
 The full-stack CI job checks out the current main of HeapCare.Api, HeapCare.Web and HeapCare.Observability, records their exact commit SHAs, and runs the suite against the isolated nine-service stack. The PatientRegistrar browser test searches by the synthetic patient's unique family-name field, matching the API's field-based search contract. Treat booking/check-in as accepted only when the full-stack job passes on a Local commit whose recorded Web SHA includes this correction (Web main 3b81a70e9113382067c9002421bbdcd528b2a22c at this acceptance trigger).
 
 The fixture uses runner-local Keycloak identities and synthetic records only. It does not create clinical notes, enter treatment data, or use real patient information. The UI test's ordinary Web CI run validates suite compilation/discovery; only the Local full-stack job executes it against real Keycloak, API and PostgreSQL.
+
+### Phase 5 appointment availability live-region full-stack replay
+
+HeapCare.Web main now includes the appointment provider-session and available-slot polite status announcements merged in Web PR #88. The hosted Web pipeline passed the component tests, production build, Chromium E2E, real-OIDC suite discovery and Docker/CSP smoke.
+
+The full-stack Local acceptance must be replayed against Web main 554012ff0cafdab86381addd8c77985fe897dccd to verify the status announcements in the real Keycloak/API/PostgreSQL environment, alongside the already-passed PatientRegistrar patient search, appointment booking and check-in flow. The replay uses synthetic records and does not create clinical notes or use real patient data.
