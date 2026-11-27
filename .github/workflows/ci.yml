@@ -96,7 +96,7 @@ jobs:
           for attempt in $(seq 1 90); do
             if curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
               http://keycloak.localhost:8082/realms/compilecare/.well-known/openid-configuration \
-              -o "$RUNNER_TEMP/compilecare-oidc.json"; then
+              -o "$RUNNER_TEMP/heapcare-oidc.json"; then
               ready=true
               break
             fi
@@ -108,7 +108,7 @@ jobs:
           fi
           python - <<'PY'
           import json
-          with open(__import__("os").path.join(__import__("os").environ["RUNNER_TEMP"], "compilecare-oidc.json"), encoding="utf-8") as file:
+          with open(__import__("os").path.join(__import__("os").environ["RUNNER_TEMP"], "heapcare-oidc.json"), encoding="utf-8") as file:
               discovery = json.load(file)
           assert discovery["issuer"] == "http://keycloak.localhost:8082/realms/compilecare", discovery["issuer"]
           assert discovery["authorization_endpoint"].endswith("/protocol/openid-connect/auth")
@@ -127,23 +127,23 @@ jobs:
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
             "http://keycloak.localhost:8082/admin/realms/compilecare/clients?clientId=compilecare-web" \
-            -o "$RUNNER_TEMP/compilecare-web-client-before-reconcile.json"
-          client_id="$(jq -r '.[0].id' "$RUNNER_TEMP/compilecare-web-client-before-reconcile.json")"
+            -o "$RUNNER_TEMP/heapcare-web-client-before-reconcile.json"
+          client_id="$(jq -r '.[0].id' "$RUNNER_TEMP/heapcare-web-client-before-reconcile.json")"
           jq '.[0] | .redirectUris = (.redirectUris | map(select(. != "http://localhost:8080/auth/silent-callback")))' \
-            "$RUNNER_TEMP/compilecare-web-client-before-reconcile.json" > "$RUNNER_TEMP/compilecare-web-client-stale.json"
+            "$RUNNER_TEMP/heapcare-web-client-before-reconcile.json" > "$RUNNER_TEMP/heapcare-web-client-stale.json"
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -X PUT -H "Authorization: Bearer $admin_token" -H "Content-Type: application/json" \
-            --data-binary @"$RUNNER_TEMP/compilecare-web-client-stale.json" \
+            --data-binary @"$RUNNER_TEMP/heapcare-web-client-stale.json" \
             "http://keycloak.localhost:8082/admin/realms/compilecare/clients/$client_id"
 
           KEYCLOAK_ADMIN_PASSWORD=LocalOnly-CI-Password-123! python3 local/scripts/configure-keycloak.py local/.env.example --base-url http://keycloak.localhost:8082
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
             "http://keycloak.localhost:8082/admin/realms/compilecare/clients?clientId=compilecare-web" \
-            -o "$RUNNER_TEMP/compilecare-web-client-after-reconcile.json"
+            -o "$RUNNER_TEMP/heapcare-web-client-after-reconcile.json"
           python - <<'PY'
           import json, os
-          with open(os.path.join(os.environ["RUNNER_TEMP"], "compilecare-web-client-after-reconcile.json"), encoding="utf-8") as file:
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "heapcare-web-client-after-reconcile.json"), encoding="utf-8") as file:
               clients = json.load(file)
           assert len(clients) == 1, clients
           redirect_uris = set(clients[0].get("redirectUris", []))
@@ -155,22 +155,22 @@ jobs:
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
             http://keycloak.localhost:8082/admin/realms/compilecare/client-scopes \
-            -o "$RUNNER_TEMP/compilecare-client-scopes.json"
+            -o "$RUNNER_TEMP/heapcare-client-scopes.json"
           curl --silent --show-error --fail --resolve keycloak.localhost:8082:127.0.0.1 \
             -H "Authorization: Bearer $admin_token" \
             "http://keycloak.localhost:8082/admin/realms/compilecare/clients?clientId=compilecare-web" \
-            -o "$RUNNER_TEMP/compilecare-web-client.json"
+            -o "$RUNNER_TEMP/heapcare-web-client.json"
           python - <<'PY'
           import json, os
           root = os.environ["RUNNER_TEMP"]
-          with open(os.path.join(root, "compilecare-client-scopes.json"), encoding="utf-8") as f:
+          with open(os.path.join(root, "heapcare-client-scopes.json"), encoding="utf-8") as f:
               scopes = {item["name"]: item for item in json.load(f)}
           assert "profile" in scopes and "email" in scopes and "compilecare-api-audience" in scopes
           profile_claims = {m.get("config", {}).get("claim.name") for m in scopes["profile"].get("protocolMappers", [])}
           email_claims = {m.get("config", {}).get("claim.name") for m in scopes["email"].get("protocolMappers", [])}
           assert "given_name" in profile_claims and "family_name" in profile_claims
           assert "email" in email_claims
-          with open(os.path.join(root, "compilecare-web-client.json"), encoding="utf-8") as f:
+          with open(os.path.join(root, "heapcare-web-client.json"), encoding="utf-8") as f:
               clients = json.load(f)
           assert len(clients) == 1, clients
           client_id = clients[0]["id"]
