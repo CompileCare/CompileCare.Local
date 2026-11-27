@@ -1059,8 +1059,9 @@ def run() -> None:
     # performs the actual booking and appointment check-in.
     appointment_zone = ZoneInfo("Asia/Kolkata")
     appointment_start = (
-        datetime.now(appointment_zone) + timedelta(minutes=25)
+        datetime.now(appointment_zone) + timedelta(minutes=45)
     ).replace(second=0, microsecond=0)
+    appointment_start += timedelta(minutes=(-appointment_start.minute) % 10)
     appointment_end = appointment_start + timedelta(minutes=10)
     appointment_date = appointment_start.date().isoformat()
 
@@ -1200,6 +1201,43 @@ def run() -> None:
     if not appointment_slot_starts_at_utc:
         raise AssertionError("Synthetic appointment slot did not return its UTC start instant.")
 
+    appointment_patient_family_name = f"Appointment-{suffix}"
+    appointment_patient_payload = {
+        "givenName": "Browser",
+        "middleName": "Appointment",
+        "familyName": appointment_patient_family_name,
+        "dateOfBirth": "1992-06-15",
+    }
+    appointment_duplicate_review = require_status(
+        "PatientRegistrar can complete duplicate review before appointment registration",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients/duplicate-candidates",
+            tokens["patient-registrar"],
+            tenant_a,
+            appointment_patient_payload,
+        ),
+        200,
+    )
+    if appointment_duplicate_review.get("evaluated") is not True or appointment_duplicate_review.get("candidates"):
+        raise AssertionError(
+            "The isolated appointment patient must have a completed no-match duplicate review."
+        )
+    appointment_patient = require_status(
+        "PatientRegistrar can register a dedicated synthetic appointment patient",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients",
+            tokens["patient-registrar"],
+            tenant_a,
+            appointment_patient_payload,
+        ),
+        201,
+    )
+    appointment_patient_id = appointment_patient.get("id")
+    if not appointment_patient_id:
+        raise AssertionError("Synthetic appointment patient registration returned no patient ID.")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
@@ -1332,6 +1370,8 @@ def run() -> None:
                 "appointmentDateLocal": appointment_date,
                 "appointmentSessionId": appointment_session_id,
                 "appointmentSlotStartsAtUtc": appointment_slot_starts_at_utc,
+                "appointmentPatientId": appointment_patient_id,
+                "appointmentPatientFamilyName": appointment_patient_family_name,
             }
         ),
         encoding="utf-8",
@@ -1371,6 +1411,8 @@ def run() -> None:
         "appointmentDateLocal",
         "appointmentSessionId",
         "appointmentSlotStartsAtUtc",
+        "appointmentPatientId",
+        "appointmentPatientFamilyName",
     )
     if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
