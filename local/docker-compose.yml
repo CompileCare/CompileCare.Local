@@ -16,7 +16,7 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     volumes:
-      - ./keycloak/heapcare-realm.json:/opt/keycloak/data/import/heapcare-realm.json:ro
+      - ./keycloak/compilecare-realm.json:/opt/keycloak/data/import/compilecare-realm.json:ro
       - compilecare-keycloak:/opt/keycloak/data
     networks:
       default:
