@@ -1,6 +1,6 @@
 # HeapCare Local
 
-> **Migration status:** HeapCare branding, local checkout directories, launcher names, container identities and HEAPCARE_* path variables are in place. Legacy COMPILECARE_* path variables are still accepted by the launchers. Existing Keycloak realm/client IDs, database names, legacy connection-string fallback and persistent Docker volume names are intentionally retained for compatibility.
+> **Migration status:** HeapCare branding, local checkout directories, launcher names, container identities and HEAPCARE_* path variables are in place. Legacy COMPILECARE_* path variables are still accepted by the launchers. The Keycloak realm display name/import filename now use HeapCare; the existing realm/client/audience IDs, database names, legacy connection-string fallback and persistent Docker volume names are intentionally retained for compatibility.
 
 One-click local development environment for the HeapCare hospital platform.
 
