@@ -194,18 +194,18 @@ jobs:
             validate --config=/etc/otel-collector-config.yaml
       - name: Validate Docker Compose configuration
         run: |
-          mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
+          mkdir -p local/.secrets "$RUNNER_TEMP/HeapCare.Web"
           printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
-          COMPILECARE_API_PATH="$GITHUB_WORKSPACE" COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml config --quiet
-          COMPILECARE_API_PATH="$GITHUB_WORKSPACE" COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml config --quiet
+          HEAPCARE_API_PATH="$GITHUB_WORKSPACE" HEAPCARE_WEB_PATH="$RUNNER_TEMP/HeapCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml config --quiet
+          HEAPCARE_API_PATH="$GITHUB_WORKSPACE" HEAPCARE_WEB_PATH="$RUNNER_TEMP/HeapCare.Web" docker compose --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml config --quiet
           rm -rf local/.secrets
       - name: Run Docker observability pipeline smoke test
         run: |
           set -euo pipefail
-          mkdir -p local/.secrets "$RUNNER_TEMP/CompileCare.Web"
+          mkdir -p local/.secrets "$RUNNER_TEMP/HeapCare.Web"
           printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
-          export COMPILECARE_API_PATH="$GITHUB_WORKSPACE"
-          export COMPILECARE_WEB_PATH="$RUNNER_TEMP/CompileCare.Web"
+          export HEAPCARE_API_PATH="$GITHUB_WORKSPACE"
+          export HEAPCARE_WEB_PATH="$RUNNER_TEMP/HeapCare.Web"
           compose=(--project-name compilecare-observability-ci --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml)
           cleanup() {
             docker compose "${compose[@]}" down --volumes --remove-orphans || true
@@ -372,19 +372,19 @@ jobs:
         with:
           repository: CompileCare/CompileCare.Api
           ref: migration/heapcare-branding
-          path: CompileCare.Api
+          path: HeapCare.Api
 
       - uses: actions/checkout@v4
         with:
           repository: CompileCare/CompileCare.Web
           ref: main
-          path: CompileCare.Web
+          path: HeapCare.Web
 
       - uses: actions/checkout@v4
         with:
           repository: CompileCare/CompileCare.Observability
           ref: main
-          path: CompileCare.Observability
+          path: HeapCare.Observability
 
       - name: Record cross-repository commit SHAs
         shell: bash
@@ -402,10 +402,10 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Pack shared observability libraries into an ephemeral local NuGet feed
-        working-directory: CompileCare.Observability
+        working-directory: HeapCare.Observability
         run: |
           set -Eeuo pipefail
-          feed="$GITHUB_WORKSPACE/CompileCare.Api/.ci-nuget"
+          feed="$GITHUB_WORKSPACE/HeapCare.Api/.ci-nuget"
           mkdir -p "$feed"
           dotnet pack src/HeapCare.Observability/HeapCare.Observability.csproj \
             --configuration Release -p:Version=1.0.1 -o "$feed"
@@ -413,7 +413,7 @@ jobs:
             --configuration Release -p:Version=1.0.1 -o "$feed"
           test -s "$feed/HeapCare.Observability.1.0.1.nupkg"
           test -s "$feed/HeapCare.Observability.AspNetCore.1.0.1.nupkg"
-          cat > "$GITHUB_WORKSPACE/CompileCare.Api/NuGet.Config" <<'EOF'
+          cat > "$GITHUB_WORKSPACE/HeapCare.Api/NuGet.Config" <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <packageSources>
@@ -463,8 +463,8 @@ jobs:
           # or private package credential is needed or supplied.
           printf 'Username=ci;Password=not-used;ValidAuthenticationTypes=Basic' \
             > local/.secrets/nuget-source-credentials
-          echo "COMPILECARE_API_PATH=$GITHUB_WORKSPACE/CompileCare.Api" >> "$GITHUB_ENV"
-          echo "COMPILECARE_WEB_PATH=$GITHUB_WORKSPACE/CompileCare.Web" >> "$GITHUB_ENV"
+          echo "HEAPCARE_API_PATH=$GITHUB_WORKSPACE/HeapCare.Api" >> "$GITHUB_ENV"
+          echo "HEAPCARE_WEB_PATH=$GITHUB_WORKSPACE/HeapCare.Web" >> "$GITHUB_ENV"
           echo "127.0.0.1 keycloak.localhost" | sudo tee -a /etc/hosts > /dev/null
           test -s local/.env
           test -s local/.secrets/nuget-source-credentials
@@ -520,7 +520,7 @@ jobs:
           node-version: 22
 
       - name: Run real Keycloak Authorization Code + PKCE browser acceptance
-        working-directory: CompileCare.Web
+        working-directory: HeapCare.Web
         env:
           COMPILECARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/compilecare-browser-user.json
         run: |
