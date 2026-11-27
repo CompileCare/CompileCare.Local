@@ -65,7 +65,7 @@ echo "  ✓ Prometheus, Jaeger, Elasticsearch and Collector metrics endpoint res
 echo "Provisioning the HeapCare Logs Kibana data view (waits for Kibana readiness)..."
 python3 local/scripts/provision-kibana-data-view.py --base-url http://localhost:5601
 curl_local http://localhost:5601/api/status >/dev/null
-echo "  ✓ Kibana is ready and data view compilecare-logs-* is provisioned"
+echo "  ✓ Kibana is ready and data view heapcare-logs-* is provisioned"
 
 echo "Checking API metrics endpoint..."
 curl_local http://localhost:8081/metrics >/dev/null

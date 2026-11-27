@@ -19,7 +19,7 @@ The overlay leaves the standard local stack unchanged when it is not supplied. I
 
 | Signal | UI / endpoint | What to use it for |
 |---|---|---|
-| Structured logs | http://localhost:5601 (Kibana) | The HeapCare Logs data view (`compilecare-logs-*`, time field `@timestamp`) is provisioned by the local stack verifier; use Discover to search by service, environment, correlation ID or audit action |
+| Structured logs | http://localhost:5601 (Kibana) | The HeapCare Logs data view (`heapcare-logs-*`, time field `@timestamp`) is provisioned by the local stack verifier; use Discover to search by service, environment, correlation ID or audit action |
 | Metrics | http://localhost:9090 (Prometheus) | Query API and collector metrics; inspect the heapcare-api and heapcare-otel-collector scrape targets |
 | Distributed traces | http://localhost:16686 (Jaeger) | Select the HeapCare.Api service and inspect request traces |
 | Raw API metrics | http://localhost:8081/metrics | Verify the API Prometheus scrape endpoint directly |
@@ -41,7 +41,7 @@ docker compose --env-file local/.env \
 2. Open the API root and readiness endpoints; confirm the API responds.
 3. Confirm `HeapCare.Api` and its Npgsql database operation appear in Jaeger.
 4. Confirm API request metrics arrive through the Collector Prometheus exporter, separately from the direct API scrape.
-5. Search the `compilecare-logs-*` data view in Kibana and correlate a synthetic request using its correlation ID.
+5. Search the `heapcare-logs-*` data view in Kibana and correlate a synthetic request using its correlation ID.
 6. Confirm no patient payloads, access tokens, credentials or other PHI are entered into test data or saved in screenshots/reports.
 
 The OTLP Collector exports metrics to its Prometheus exporter and traces to Jaeger. Logs are sent by the API Serilog Elasticsearch sink; this setup does not add an OTLP logs pipeline.

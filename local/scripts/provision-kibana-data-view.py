@@ -62,12 +62,9 @@ def provision(base_url: str, timeout_seconds: int) -> None:
     if status != 200:
         raise RuntimeError(f"Kibana data view listing failed with HTTP {status}: {listing}")
 
+    views = listing.get("data_view", [])
     existing = next(
-        (
-            view
-            for view in listing.get("data_view", [])
-            if view.get("title") == "compilecare-logs-*"
-        ),
+        (view for view in views if view.get("title") == "heapcare-logs-*"),
         None,
     )
     if existing:
@@ -77,10 +74,48 @@ def provision(base_url: str, timeout_seconds: int) -> None:
         )
         return
 
+    legacy = next(
+        (
+            view
+            for view in views
+            if view.get("name") == "HeapCare Logs"
+            and view.get("title") == "compilecare-logs-*"
+            and view.get("id")
+        ),
+        None,
+    )
+    if legacy:
+        status, updated = request(
+            base_url,
+            f"/api/data_views/data_view/{legacy['id']}",
+            method="POST",
+            payload={
+                "data_view": {
+                    "name": "HeapCare Logs",
+                    "title": "heapcare-logs-*",
+                    "timeFieldName": "@timestamp",
+                }
+            },
+        )
+        if status not in (200, 201):
+            raise RuntimeError(
+                f"Kibana could not update legacy HeapCare Logs data view "
+                f"(HTTP {status}): {updated}"
+            )
+        data_view = updated.get("data_view", {})
+        if data_view.get("title") != "heapcare-logs-*":
+            raise RuntimeError(f"Kibana returned an unexpected updated data view: {updated}")
+        print(
+            "Updated HeapCare Logs data view "
+            f"(id={data_view.get('id')}, title={data_view.get('title')}, "
+            f"timeField={data_view.get('timeFieldName')})."
+        )
+        return
+
     payload = {
         "data_view": {
             "name": "HeapCare Logs",
-            "title": "compilecare-logs-*",
+            "title": "heapcare-logs-*",
             "timeFieldName": "@timestamp",
             "allowNoIndex": True,
         }
@@ -98,7 +133,7 @@ def provision(base_url: str, timeout_seconds: int) -> None:
         )
 
     data_view = created.get("data_view", {})
-    if data_view.get("title") != "compilecare-logs-*":
+    if data_view.get("title") != "heapcare-logs-*":
         raise RuntimeError(f"Kibana returned an unexpected data view: {created}")
 
     print(
