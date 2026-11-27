@@ -374,19 +374,19 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: CompileCare/CompileCare.Api
+          repository: HeapCare/HeapCare.Api
           ref: main
           path: HeapCare.Api
 
       - uses: actions/checkout@v4
         with:
-          repository: CompileCare/CompileCare.Web
+          repository: HeapCare/HeapCare.Web
           ref: main
           path: HeapCare.Web
 
       - uses: actions/checkout@v4
         with:
-          repository: CompileCare/CompileCare.Observability
+          repository: HeapCare/HeapCare.Observability
           ref: main
           path: HeapCare.Observability
 
@@ -394,12 +394,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          for repository in CompileCare.Local CompileCare.Api CompileCare.Web CompileCare.Observability; do
+          for repository in HeapCare.Local HeapCare.Api HeapCare.Web HeapCare.Observability; do
             case "$repository" in
-              CompileCare.Local) checkout="$GITHUB_WORKSPACE/HeapCare.Local" ;;
-              CompileCare.Api) checkout="$GITHUB_WORKSPACE/HeapCare.Api" ;;
-              CompileCare.Web) checkout="$GITHUB_WORKSPACE/HeapCare.Web" ;;
-              CompileCare.Observability) checkout="$GITHUB_WORKSPACE/HeapCare.Observability" ;;
+              HeapCare.Local) checkout="$GITHUB_WORKSPACE/HeapCare.Local" ;;
+              HeapCare.Api) checkout="$GITHUB_WORKSPACE/HeapCare.Api" ;;
+              HeapCare.Web) checkout="$GITHUB_WORKSPACE/HeapCare.Web" ;;
+              HeapCare.Observability) checkout="$GITHUB_WORKSPACE/HeapCare.Observability" ;;
             esac
             echo "===== ${repository} (HeapCare checkout: $checkout) ====="
             git -C "$checkout" rev-parse HEAD

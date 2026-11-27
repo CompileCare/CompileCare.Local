@@ -34,7 +34,7 @@ sync_repository() {
   if [[ ! -d "$path/.git" ]]; then
     [[ ! -e "$path" ]] || fail "$path exists but is not a Git checkout. Move it aside or inspect it before retrying."
     echo "Cloning $repo..."
-    gh repo clone "CompileCare/$repo" "$path" || fail "Unable to clone CompileCare/$repo."
+    gh repo clone "HeapCare/$repo" "$path" || fail "Unable to clone HeapCare/$repo."
     return
   fi
 
@@ -47,8 +47,8 @@ sync_repository() {
   git -C "$path" pull --ff-only origin main || fail "$repo cannot fast-forward. Resolve the branch state manually; no local changes were overwritten."
 }
 
-sync_repository "CompileCare.Api" "$API"
-sync_repository "CompileCare.Web" "$WEB"
+sync_repository "HeapCare.Api" "$API"
+sync_repository "HeapCare.Web" "$WEB"
 export HEAPCARE_API_PATH="$API" HEAPCARE_WEB_PATH="$WEB"
 export COMPILECARE_API_PATH="$API" COMPILECARE_WEB_PATH="$WEB"
 

@@ -15,8 +15,8 @@ if (-not (Test-Path (Join-Path $Api ".git")) -and (Test-Path (Join-Path $LegacyA
 $Web = Join-Path (Split-Path $Root -Parent) "HeapCare.Web"
 $LegacyWeb = Join-Path (Split-Path $Root -Parent) "CompileCare.Web"
 if (-not (Test-Path (Join-Path $Web ".git")) -and (Test-Path (Join-Path $LegacyWeb ".git"))) { $Web = $LegacyWeb }
-if (-not (Test-Path (Join-Path $Api ".git"))) { gh repo clone CompileCare/CompileCare.Api $Api; if ($LASTEXITCODE -ne 0) { throw "Could not clone CompileCare.Api." } }
-if (-not (Test-Path (Join-Path $Web ".git"))) { gh repo clone CompileCare/CompileCare.Web $Web; if ($LASTEXITCODE -ne 0) { throw "Could not clone CompileCare.Web." } }
+if (-not (Test-Path (Join-Path $Api ".git"))) { gh repo clone HeapCare/HeapCare.Api $Api; if ($LASTEXITCODE -ne 0) { throw "Could not clone HeapCare/HeapCare.Api." } }
+if (-not (Test-Path (Join-Path $Web ".git"))) { gh repo clone HeapCare/HeapCare.Web $Web; if ($LASTEXITCODE -ne 0) { throw "Could not clone HeapCare/HeapCare.Web." } }
 $env:HEAPCARE_API_PATH = $Api
 $env:HEAPCARE_WEB_PATH = $Web
 $env:COMPILECARE_API_PATH = $Api
