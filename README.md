@@ -1,6 +1,8 @@
-# CompileCare Local
+# HeapCare Local
 
-One-click local development environment for the CompileCare hospital platform.
+> **Brand migration in progress:** HeapCare is the product brand. Repository names, .NET namespaces, package IDs, database identifiers, OIDC realm/client IDs, and deployment identifiers remain unchanged until their coordinated migration is implemented and validated. Do not infer that technical identifiers have already changed.
+
+One-click local development environment for the HeapCare hospital platform.
 
 This repository orchestrates the API, Web application, PostgreSQL and a preconfigured local Keycloak identity provider in Docker Compose. Hospital domain code remains in the API and Web repositories.
 
