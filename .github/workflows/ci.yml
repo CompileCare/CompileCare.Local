@@ -366,7 +366,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: CompileCare.Local
+          path: HeapCare.Local
 
       - uses: actions/checkout@v4
         with:
@@ -392,7 +392,7 @@ jobs:
           set -Eeuo pipefail
           for repository in CompileCare.Local CompileCare.Api CompileCare.Web CompileCare.Observability; do
             case "$repository" in
-              CompileCare.Local) checkout="$GITHUB_WORKSPACE/CompileCare.Local" ;;
+              CompileCare.Local) checkout="$GITHUB_WORKSPACE/HeapCare.Local" ;;
               CompileCare.Api) checkout="$GITHUB_WORKSPACE/HeapCare.Api" ;;
               CompileCare.Web) checkout="$GITHUB_WORKSPACE/HeapCare.Web" ;;
               CompileCare.Observability) checkout="$GITHUB_WORKSPACE/HeapCare.Observability" ;;
@@ -439,7 +439,7 @@ jobs:
           EOF
 
       - name: Prepare isolated synthetic local environment and non-credential Docker secret
-        working-directory: CompileCare.Local
+        working-directory: HeapCare.Local
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -476,7 +476,7 @@ jobs:
           test -s local/.secrets/nuget-source-credentials
 
       - name: Build and run the complete nine-service Compose stack
-        working-directory: CompileCare.Local
+        working-directory: HeapCare.Local
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -514,7 +514,7 @@ jobs:
           bash local/scripts/verify-stack.sh
 
       - name: Verify real Keycloak-issued identities and persisted multi-tenant workflows
-        working-directory: CompileCare.Local
+        working-directory: HeapCare.Local
         env:
           COMPILECARE_CI_ACCEPTANCE: "1"
           COMPILECARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/compilecare-browser-user.json
@@ -536,7 +536,7 @@ jobs:
 
       - name: Capture full-stack diagnostics on failure
         if: failure()
-        working-directory: CompileCare.Local
+        working-directory: HeapCare.Local
         run: |
           docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
             -f local/docker-compose.yml -f local/docker-compose.observability.yml ps || true
@@ -545,7 +545,7 @@ jobs:
 
       - name: Stop the isolated stack and remove CI-only secrets and volumes
         if: always()
-        working-directory: CompileCare.Local
+        working-directory: HeapCare.Local
         run: |
           docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
             -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes --remove-orphans || true
