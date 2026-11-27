@@ -13,6 +13,8 @@ import json
 import os
 import secrets
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1052,6 +1054,152 @@ def run() -> None:
     ):
         raise AssertionError(f"OPD daily collection does not match the synthetic payment ledger: {daily_collection!r}")
 
+    # Publish one synthetic provider slot using the real staff and scheduling
+    # endpoints. Leave the slot unbooked so the PatientRegistrar browser journey
+    # performs the actual booking and appointment check-in.
+    appointment_zone = ZoneInfo("Asia/Kolkata")
+    appointment_start = (
+        datetime.now(appointment_zone) + timedelta(minutes=25)
+    ).replace(second=0, microsecond=0)
+    appointment_end = appointment_start + timedelta(minutes=10)
+    appointment_date = appointment_start.date().isoformat()
+
+    provider_profile = require_status(
+        "HospitalAdmin can create a synthetic assigned OPD provider profile",
+        api.call(
+            "POST",
+            "/api/v1/staff",
+            tokens["shared"],
+            tenant_a,
+            {
+                "staffCode": f"CI-APPT-{suffix.upper()}",
+                "givenName": "HeapCare",
+                "middleName": "CI",
+                "familyName": "Consultant",
+                "providerDesignation": "Consultant",
+                "hospitalId": hospital_a,
+                "departmentId": department_a,
+                "effectiveFrom": appointment_date,
+            },
+        ),
+        201,
+    )
+    provider_staff_id = provider_profile.get("id")
+    if not provider_staff_id:
+        raise AssertionError("Synthetic provider profile did not return a staff ID.")
+    provider_assignments = provider_profile.get("assignments", [])
+    if not any(
+        assignment.get("hospitalId") == hospital_a
+        and assignment.get("departmentId") == department_a
+        and assignment.get("isActive") is True
+        for assignment in provider_assignments
+    ):
+        raise AssertionError("Synthetic provider profile did not receive its active department assignment.")
+
+    expect_api_status(
+        "PatientRegistrar cannot create a provider staff profile",
+        api,
+        "POST",
+        "/api/v1/staff",
+        tokens["patient-registrar"],
+        tenant_a,
+        403,
+        {
+            "staffCode": f"CI-APPT-DENIED-{suffix.upper()}",
+            "givenName": "Forbidden",
+            "middleName": None,
+            "familyName": "Provider",
+            "providerDesignation": "Consultant",
+            "hospitalId": hospital_a,
+            "departmentId": department_a,
+            "effectiveFrom": appointment_date,
+        },
+    )
+
+    availability_path = f"/api/v1/hospitals/{hospital_a}/availability-sessions"
+    availability_payload = {
+        "departmentId": department_a,
+        "providerStaffId": provider_staff_id,
+        "localDate": appointment_date,
+        "startLocalTime": appointment_start.time().isoformat(timespec="seconds"),
+        "endLocalTime": appointment_end.time().isoformat(timespec="seconds"),
+        "slotDurationMinutes": 10,
+        "timeZoneId": "Asia/Kolkata",
+    }
+    expect_api_status(
+        "FacilityManager cannot publish provider availability",
+        api,
+        "POST",
+        availability_path,
+        tokens["facility-manager"],
+        tenant_a,
+        403,
+        availability_payload,
+    )
+    provider_session = require_status(
+        "HospitalAdmin can publish the synthetic provider availability session",
+        api.call(
+            "POST",
+            availability_path,
+            tokens["shared"],
+            tenant_a,
+            availability_payload,
+        ),
+        201,
+    )
+    appointment_session_id = provider_session.get("id")
+    if not appointment_session_id:
+        raise AssertionError("Synthetic availability session did not return its ID.")
+
+    availability_query = (
+        f"?date={appointment_date}&departmentId={department_a}&page=1&pageSize=25"
+    )
+    registrar_availability = require_status(
+        "PatientRegistrar can discover published provider availability",
+        api.call(
+            "GET",
+            availability_path + availability_query,
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if not any(
+        item.get("id") == appointment_session_id
+        for item in registrar_availability.get("items", [])
+    ):
+        raise AssertionError("PatientRegistrar did not receive the synthetic provider availability session.")
+
+    expect_api_status(
+        "ClinicalUser cannot read provider availability",
+        api,
+        "GET",
+        availability_path + availability_query,
+        tokens["clinical-user"],
+        tenant_a,
+        403,
+    )
+    provider_slots = require_status(
+        "PatientRegistrar can retrieve the published provider slots",
+        api.call(
+            "GET",
+            f"{availability_path}/{appointment_session_id}/slots",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    available_provider_slots = [
+        item for item in provider_slots if item.get("isAvailable") is True
+    ]
+    if len(available_provider_slots) != 1:
+        raise AssertionError(
+            f"Expected exactly one available synthetic appointment slot; received {provider_slots!r}"
+        )
+    appointment_slot_starts_at_utc = available_provider_slots[0].get("startsAtUtc")
+    if not appointment_slot_starts_at_utc:
+        raise AssertionError("Synthetic appointment slot did not return its UTC start instant.")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
@@ -1181,6 +1329,9 @@ def run() -> None:
                 "patientFamilyName": duplicate_family_name,
                 "billingInvoiceNumber": invoice_number,
                 "billingReceiptNumber": receipt_number,
+                "appointmentDateLocal": appointment_date,
+                "appointmentSessionId": appointment_session_id,
+                "appointmentSlotStartsAtUtc": appointment_slot_starts_at_utc,
             }
         ),
         encoding="utf-8",
@@ -1217,6 +1368,9 @@ def run() -> None:
         "patientFamilyName",
         "billingInvoiceNumber",
         "billingReceiptNumber",
+        "appointmentDateLocal",
+        "appointmentSessionId",
+        "appointmentSlotStartsAtUtc",
     )
     if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
