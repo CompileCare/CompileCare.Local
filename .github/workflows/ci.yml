@@ -26,7 +26,7 @@ jobs:
           if ($launcher -notmatch 'docker-compose\.observability\.yml') { throw "Windows launcher must include the observability Compose overlay." }
           if ($launcher -notmatch 'provision-kibana-data-view\.py') { throw "Windows launcher must provision the Kibana data view." }
           if ($launcher -notmatch 'pg_isready') { throw "Windows launcher must verify PostgreSQL readiness." }
-          $stop = Get-Content "local/Stop CompileCare.bat" -Raw
+          $stop = Get-Content "local/Stop HeapCare.bat" -Raw
           if ($stop -notmatch 'docker-compose\.observability\.yml') { throw "Windows stop launcher must stop the observability overlay." }
       - name: Validate local secret placeholders fail closed
         run: |
