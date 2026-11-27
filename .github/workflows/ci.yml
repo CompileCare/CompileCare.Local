@@ -386,6 +386,16 @@ jobs:
           ref: main
           path: CompileCare.Observability
 
+      - name: Record cross-repository commit SHAs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for repository in CompileCare.Local CompileCare.Api CompileCare.Web CompileCare.Observability; do
+            echo "===== ${repository} ====="
+            git -C "$GITHUB_WORKSPACE/$repository" rev-parse HEAD
+            git -C "$GITHUB_WORKSPACE/$repository" log -1 --format='%H %s'
+          done
+
       - name: Install .NET SDK for the shared observability projects
         uses: actions/setup-dotnet@v4
         with:
