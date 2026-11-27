@@ -1179,6 +1179,8 @@ def run() -> None:
                 "queueTokenNumber": in_progress_queue_entry.get("tokenNumber"),
                 "queueDateLocal": in_progress_queue_entry.get("queueDateLocal"),
                 "patientFamilyName": duplicate_family_name,
+                "billingInvoiceNumber": invoice_number,
+                "billingReceiptNumber": receipt_number,
             }
         ),
         encoding="utf-8",
@@ -1208,7 +1210,14 @@ def run() -> None:
     ):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic tenant or organization IDs.")
 
-    required_opd_fixture_fields = ("queueEntryId", "queueTokenNumber", "queueDateLocal", "patientFamilyName")
+    required_opd_fixture_fields = (
+        "queueEntryId",
+        "queueTokenNumber",
+        "queueDateLocal",
+        "patientFamilyName",
+        "billingInvoiceNumber",
+        "billingReceiptNumber",
+    )
     if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
 
