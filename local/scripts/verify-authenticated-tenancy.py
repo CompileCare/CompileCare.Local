@@ -1500,6 +1500,270 @@ def run() -> None:
     if not appointment_patient_id:
         raise AssertionError("Synthetic appointment patient registration returned no patient ID.")
 
+    # Cancellation lifecycle acceptance uses a separate appointment on the
+    # already-published browser slot. It is cancelled before the browser books
+    # that slot, so the real UI journey can still consume the same availability.
+    cancellation_api_appointment = require_status(
+        "PatientRegistrar can book a synthetic appointment for cancellation acceptance",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/appointments",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "availabilitySessionId": appointment_session_id,
+                "patientId": appointment_patient_id,
+                "slotStartsAtUtc": appointment_slot_starts_at_utc,
+                "reason": "Synthetic cancellation lifecycle acceptance",
+            },
+        ),
+        201,
+    )
+    cancellation_api_appointment_id = cancellation_api_appointment.get("id")
+    if not cancellation_api_appointment_id:
+        raise AssertionError("Synthetic cancellation appointment returned no ID.")
+
+    cancelled_api_appointment = require_status(
+        "PatientRegistrar can cancel a booked appointment",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}/cancel",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if cancelled_api_appointment.get("status") != "Cancelled":
+        raise AssertionError(f"Appointment cancellation did not persist Cancelled status: {cancelled_api_appointment!r}")
+
+    repeat_cancel_status, _, _ = api.call(
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}/cancel",
+        tokens["patient-registrar"],
+        tenant_a,
+    )
+    if repeat_cancel_status != 409:
+        raise AssertionError(f"Repeated appointment cancellation must return HTTP 409; received {repeat_cancel_status}.")
+
+    cancelled_check_in_status, _, _ = api.call(
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}/check-in",
+        tokens["patient-registrar"],
+        tenant_a,
+    )
+    if cancelled_check_in_status != 409:
+        raise AssertionError(f"Cancelled appointment check-in must return HTTP 409; received {cancelled_check_in_status}.")
+
+    cancelled_reschedule_status, _, _ = api.call(
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}/reschedule",
+        tokens["patient-registrar"],
+        tenant_a,
+        {
+            "availabilitySessionId": appointment_session_id,
+            "patientId": appointment_patient_id,
+            "slotStartsAtUtc": appointment_slot_starts_at_utc,
+            "reason": "Must not revive cancelled appointment",
+        },
+    )
+    if cancelled_reschedule_status != 409:
+        raise AssertionError(f"Cancelled appointment reschedule must return HTTP 409; received {cancelled_reschedule_status}.")
+
+    cancelled_api_readback = require_status(
+        "PatientRegistrar can read the retained cancelled appointment",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if cancelled_api_readback.get("status") != "Cancelled":
+        raise AssertionError(f"Cancelled appointment was unexpectedly revived: {cancelled_api_readback!r}")
+
+    # Publish a second non-overlapping session for one UI-cancel appointment
+    # and one already-checked-in appointment. The former is left Booked for
+    # the real browser workspace; the latter proves a 409 cannot orphan its
+    # durable queue entry.
+    cancellation_session_start = appointment_start + timedelta(minutes=15)
+    cancellation_session_end = cancellation_session_start + timedelta(minutes=15)
+    cancellation_session_payload = {
+        "departmentId": department_a,
+        "providerStaffId": provider_staff_id,
+        "localDate": appointment_date,
+        "startLocalTime": cancellation_session_start.time().isoformat(timespec="seconds"),
+        "endLocalTime": cancellation_session_end.time().isoformat(timespec="seconds"),
+        "slotDurationMinutes": 5,
+        "timeZoneId": "Asia/Kolkata",
+    }
+    cancellation_session = require_status(
+        "HospitalAdmin can publish separate appointment cancellation acceptance slots",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/availability-sessions",
+            tokens["shared"],
+            tenant_a,
+            cancellation_session_payload,
+        ),
+        201,
+    )
+    cancellation_session_id = cancellation_session.get("id")
+    if not cancellation_session_id:
+        raise AssertionError("Cancellation acceptance availability session returned no ID.")
+
+    cancellation_slots = require_status(
+        "PatientRegistrar can read cancellation acceptance slots",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/availability-sessions/{cancellation_session_id}/slots",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    available_cancellation_slots = [slot for slot in cancellation_slots if slot.get("isAvailable") is True]
+    if len(available_cancellation_slots) != 3:
+        raise AssertionError(
+            f"Expected three available synthetic cancellation slots; received {cancellation_slots!r}"
+        )
+
+    cancellation_ui_family_name = f"ManagementCancel-{suffix}"
+    cancellation_ui_patient_payload = {
+        "givenName": "Browser",
+        "middleName": "Management",
+        "familyName": cancellation_ui_family_name,
+        "dateOfBirth": "1991-04-23",
+    }
+    cancellation_ui_duplicate_review = require_status(
+        "PatientRegistrar can complete duplicate review for the appointment-management synthetic patient",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients/duplicate-candidates",
+            tokens["patient-registrar"],
+            tenant_a,
+            cancellation_ui_patient_payload,
+        ),
+        200,
+    )
+    if (
+        cancellation_ui_duplicate_review.get("evaluated") is not True
+        or cancellation_ui_duplicate_review.get("candidates")
+    ):
+        raise AssertionError("Appointment-management synthetic patient must have a completed no-match duplicate review.")
+
+    cancellation_ui_patient = require_status(
+        "PatientRegistrar can register a dedicated appointment-management patient",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients",
+            tokens["patient-registrar"],
+            tenant_a,
+            cancellation_ui_patient_payload,
+        ),
+        201,
+    )
+    cancellation_ui_patient_id = cancellation_ui_patient.get("id")
+    if not cancellation_ui_patient_id:
+        raise AssertionError("Appointment-management synthetic patient returned no ID.")
+
+    cancellation_ui_appointment = require_status(
+        "PatientRegistrar can book the separate appointment reserved for browser cancellation",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/appointments",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "availabilitySessionId": cancellation_session_id,
+                "patientId": cancellation_ui_patient_id,
+                "slotStartsAtUtc": available_cancellation_slots[0].get("startsAtUtc"),
+                "reason": "Synthetic browser cancellation acceptance",
+            },
+        ),
+        201,
+    )
+    cancellation_ui_appointment_id = cancellation_ui_appointment.get("id")
+    if not cancellation_ui_appointment_id:
+        raise AssertionError("Browser cancellation appointment returned no ID.")
+    if cancellation_ui_appointment.get("status") != "Booked":
+        raise AssertionError(f"Browser cancellation appointment was not Booked: {cancellation_ui_appointment!r}")
+
+    checked_in_guard_appointment = require_status(
+        "PatientRegistrar can book a synthetic appointment for cancellation-after-check-in acceptance",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/appointments",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "availabilitySessionId": cancellation_session_id,
+                "patientId": appointment_patient_id,
+                "slotStartsAtUtc": available_cancellation_slots[1].get("startsAtUtc"),
+                "reason": "Synthetic cancellation after check-in acceptance",
+            },
+        ),
+        201,
+    )
+    checked_in_guard_appointment_id = checked_in_guard_appointment.get("id")
+    if not checked_in_guard_appointment_id:
+        raise AssertionError("Checked-in cancellation guard appointment returned no ID.")
+
+    checked_in_guard_queue = require_status(
+        "PatientRegistrar can check in the appointment reserved for cancellation guard acceptance",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/appointments/{checked_in_guard_appointment_id}/check-in",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    checked_in_guard_queue_id = checked_in_guard_queue.get("id")
+    if not checked_in_guard_queue_id:
+        raise AssertionError("Checked-in cancellation guard did not return a queue-entry ID.")
+
+    checked_in_cancel_status, _, _ = api.call(
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/appointments/{checked_in_guard_appointment_id}/cancel",
+        tokens["patient-registrar"],
+        tenant_a,
+    )
+    if checked_in_cancel_status != 409:
+        raise AssertionError(
+            f"Cancelling an appointment after check-in must return HTTP 409; received {checked_in_cancel_status}."
+        )
+
+    checked_in_guard_readback = require_status(
+        "PatientRegistrar can read the appointment retained after checked-in cancellation denial",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/appointments/{checked_in_guard_appointment_id}",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if checked_in_guard_readback.get("status") != "Booked":
+        raise AssertionError(
+            f"Checked-in appointment should remain Booked after cancellation denial: {checked_in_guard_readback!r}"
+        )
+
+    queue_date = checked_in_guard_queue.get("queueDateLocal")
+    checked_in_queue_page = require_status(
+        "PatientRegistrar can verify the checked-in appointment queue entry remains present",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/queue"
+            f"?departmentId={department_a}&date={queue_date}&page=1&pageSize=50",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if not any(item.get("id") == checked_in_guard_queue_id for item in checked_in_queue_page.get("items", [])):
+        raise AssertionError("Cancellation denial removed or hid the checked-in appointment queue entry.")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
@@ -1634,6 +1898,9 @@ def run() -> None:
                 "appointmentSlotStartsAtUtc": appointment_slot_starts_at_utc,
                 "appointmentPatientId": appointment_patient_id,
                 "appointmentPatientFamilyName": appointment_patient_family_name,
+                "appointmentManagementCancelPatientId": cancellation_ui_patient_id,
+                "appointmentManagementCancelAppointmentId": cancellation_ui_appointment_id,
+                "appointmentManagementCancelPatientFamilyName": cancellation_ui_family_name,
                 "clinicalQueueEntryId": clinical_queue_entry_id,
                 "clinicalQueueTokenNumber": started_clinical_queue.get("tokenNumber"),
                 "clinicalQueueDateLocal": started_clinical_queue.get("queueDateLocal"),
@@ -1680,6 +1947,9 @@ def run() -> None:
         "appointmentSlotStartsAtUtc",
         "appointmentPatientId",
         "appointmentPatientFamilyName",
+        "appointmentManagementCancelPatientId",
+        "appointmentManagementCancelAppointmentId",
+        "appointmentManagementCancelPatientFamilyName",
         "clinicalQueueEntryId",
         "clinicalQueueTokenNumber",
         "clinicalQueueDateLocal",
