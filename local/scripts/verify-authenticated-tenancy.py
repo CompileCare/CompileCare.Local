@@ -851,6 +851,233 @@ def run() -> None:
         403,
     )
 
+    # Exercise the ClinicalUser encounter lifecycle using a second,
+    # isolated synthetic patient/queue entry. Keep the original in-progress
+    # encounter untouched for the browser's empty-note/sign-disabled check.
+    clinical_patient_family_name = f"Clinical-{suffix.upper()}"
+    clinical_patient_payload = {
+        "givenName": "CI",
+        "middleName": "Synthetic",
+        "familyName": clinical_patient_family_name,
+        "dateOfBirth": "1991-05-14",
+    }
+    clinical_duplicate_review = require_status(
+        "PatientRegistrar completes duplicate review for the synthetic clinical patient",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients/duplicate-candidates",
+            tokens["patient-registrar"],
+            tenant_a,
+            clinical_patient_payload,
+        ),
+        200,
+    )
+    if clinical_duplicate_review.get("evaluated") is not True or clinical_duplicate_review.get("candidates"):
+        raise AssertionError("Synthetic clinical patient must pass an explicit no-match duplicate review.")
+
+    clinical_patient = require_status(
+        "PatientRegistrar registers the separate synthetic clinical patient",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients",
+            tokens["patient-registrar"],
+            tenant_a,
+            clinical_patient_payload,
+        ),
+        201,
+    )
+    clinical_patient_id = clinical_patient.get("id")
+    if not clinical_patient_id:
+        raise AssertionError("Synthetic clinical patient registration returned no ID.")
+
+    clinical_walk_in = require_status(
+        "PatientRegistrar creates a separate synthetic clinical walk-in",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/walk-ins",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "departmentId": department_a,
+                "patientId": clinical_patient_id,
+                "timeZoneId": "Asia/Kolkata",
+            },
+        ),
+        201,
+    )
+    clinical_queue_entry_id = clinical_walk_in.get("id")
+    if not clinical_queue_entry_id:
+        raise AssertionError("Synthetic clinical walk-in returned no queue-entry ID.")
+
+    require_status(
+        "PatientRegistrar calls the separate synthetic clinical queue entry",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/{clinical_queue_entry_id}/call",
+            tokens["patient-registrar"],
+            tenant_a,
+            {"reason": None},
+        ),
+        200,
+    )
+    started_clinical_queue = require_status(
+        "PatientRegistrar starts the separate synthetic clinical queue entry",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/{clinical_queue_entry_id}/start",
+            tokens["patient-registrar"],
+            tenant_a,
+            {"reason": None},
+        ),
+        200,
+    )
+    if started_clinical_queue.get("status") != "InProgress":
+        raise AssertionError("Separate synthetic clinical queue entry did not reach InProgress.")
+
+    clinical_encounter = require_status(
+        "ClinicalUser creates an encounter from the in-progress synthetic queue entry",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/opd/queue/{clinical_queue_entry_id}/encounter",
+            tokens["clinical-user"],
+            tenant_a,
+        ),
+        201,
+    )
+    clinical_encounter_id = clinical_encounter.get("id")
+    if (
+        not clinical_encounter_id
+        or clinical_encounter.get("status") != "InProgress"
+        or clinical_encounter.get("createdBySubject") != subjects["clinical-user"]
+        or clinical_encounter.get("patientId") != clinical_patient_id
+    ):
+        raise AssertionError("Clinical encounter creation did not preserve its patient, lifecycle or author attribution.")
+
+    duplicate_clinical_encounter_status, _, _ = api.call(
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/opd/queue/{clinical_queue_entry_id}/encounter",
+        tokens["clinical-user"],
+        tenant_a,
+    )
+    if duplicate_clinical_encounter_status != 409:
+        raise AssertionError(
+            f"Duplicate encounter creation must return HTTP 409; received HTTP {duplicate_clinical_encounter_status}."
+        )
+
+    # Explicit CI placeholders only: no real history, examination, diagnosis
+    # or treatment instruction is created in this ephemeral database.
+    synthetic_note = {
+        "chiefComplaint": "CI synthetic encounter fixture",
+        "history": "Automated acceptance placeholder; no real patient history.",
+        "examination": "Automated acceptance placeholder; no clinical findings recorded.",
+        "assessment": "Synthetic CI assessment placeholder only.",
+        "plan": "Synthetic CI plan placeholder only; not a care instruction.",
+    }
+    encounter_path = f"/api/v1/hospitals/{hospital_a}/opd/encounters/{clinical_encounter_id}"
+    drafted_encounter = require_status(
+        "ClinicalUser saves a synthetic OPD note draft",
+        api.call(
+            "PUT",
+            encounter_path + "/note",
+            tokens["clinical-user"],
+            tenant_a,
+            synthetic_note,
+        ),
+        200,
+    )
+    if drafted_encounter.get("assessment") != synthetic_note["assessment"]:
+        raise AssertionError("Synthetic draft assessment was not returned after save.")
+
+    signed_encounter = require_status(
+        "ClinicalUser signs the synthetic OPD encounter",
+        api.call(
+            "POST",
+            encounter_path + "/sign",
+            tokens["clinical-user"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        signed_encounter.get("status") != "Signed"
+        or signed_encounter.get("signedBySubject") != subjects["clinical-user"]
+        or not signed_encounter.get("signedAtUtc")
+    ):
+        raise AssertionError("Signed encounter is missing persisted status or signer attribution.")
+
+    overwrite_status, _, _ = api.call(
+        "PUT",
+        encounter_path + "/note",
+        tokens["clinical-user"],
+        tenant_a,
+        {**synthetic_note, "assessment": "Changed after signature; must be rejected."},
+    )
+    if overwrite_status != 409:
+        raise AssertionError(
+            f"Updating a signed clinical note must return HTTP 409; received HTTP {overwrite_status}."
+        )
+
+    require_status(
+        "ClinicalUser closes the signed synthetic encounter",
+        api.call(
+            "POST",
+            encounter_path + "/close",
+            tokens["clinical-user"],
+            tenant_a,
+        ),
+        200,
+    )
+    amended_encounter = require_status(
+        "ClinicalUser appends an attributed amendment to the closed signed encounter",
+        api.call(
+            "POST",
+            encounter_path + "/amendments",
+            tokens["clinical-user"],
+            tenant_a,
+            {
+                "reason": "Synthetic CI amendment",
+                "content": "Synthetic amendment fixture only; not a clinical instruction.",
+            },
+        ),
+        200,
+    )
+    if (
+        amended_encounter.get("status") != "Closed"
+        or amended_encounter.get("assessment") != synthetic_note["assessment"]
+        or len(amended_encounter.get("amendments", [])) != 1
+        or amended_encounter["amendments"][0].get("authorSubject") != subjects["clinical-user"]
+    ):
+        raise AssertionError("Amendment changed the original signed note or lost author attribution.")
+
+    persisted_encounter = require_status(
+        "ClinicalUser re-reads the signed encounter and amendment history",
+        api.call(
+            "GET",
+            encounter_path,
+            tokens["clinical-user"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        persisted_encounter.get("status") != "Closed"
+        or persisted_encounter.get("assessment") != synthetic_note["assessment"]
+        or len(persisted_encounter.get("amendments", [])) != 1
+    ):
+        raise AssertionError("Persisted encounter does not retain the signed original plus one amendment.")
+
+    expect_api_status(
+        "PatientRegistrar cannot read the synthetic clinical encounter",
+        api,
+        "GET",
+        encounter_path,
+        tokens["patient-registrar"],
+        tenant_a,
+        403,
+    )
+
+    print("Verified real Keycloak ClinicalUser draft, signature attribution, signed-note immutability, close, append-only amendment and PatientRegistrar denial using synthetic CI records.")
+
     # Verify the OPD billing workflow with real Keycloak-issued HospitalAdmin
     # and PatientRegistrar identities. All visit, invoice and payment records
     # are synthetic and short-lived in this isolated acceptance database.
@@ -1407,6 +1634,10 @@ def run() -> None:
                 "appointmentSlotStartsAtUtc": appointment_slot_starts_at_utc,
                 "appointmentPatientId": appointment_patient_id,
                 "appointmentPatientFamilyName": appointment_patient_family_name,
+                "clinicalQueueEntryId": clinical_queue_entry_id,
+                "clinicalQueueTokenNumber": started_clinical_queue.get("tokenNumber"),
+                "clinicalQueueDateLocal": started_clinical_queue.get("queueDateLocal"),
+                "clinicalPatientFamilyName": clinical_patient_family_name,
             }
         ),
         encoding="utf-8",
@@ -1449,6 +1680,10 @@ def run() -> None:
         "appointmentSlotStartsAtUtc",
         "appointmentPatientId",
         "appointmentPatientFamilyName",
+        "clinicalQueueEntryId",
+        "clinicalQueueTokenNumber",
+        "clinicalQueueDateLocal",
+        "clinicalPatientFamilyName",
     )
     if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
