@@ -533,6 +533,11 @@ def run() -> None:
         api, tokens["tenant-b-admin"], tenant_b, "CI Hospital B", f"B-{suffix.upper()}"
     )
 
+    department_a = create_department(
+        api, tokens["shared"], tenant_a, hospital_a,
+        "CI Department A", f"DA-{suffix.upper()}"
+    )
+
     department_b = create_department(
         api, tokens["tenant-b-admin"], tenant_b, hospital_b,
         "CI Department B", f"DB-{suffix.upper()}"
@@ -751,6 +756,302 @@ def run() -> None:
         if "HeapCare" in serialized_body or duplicate_family_name in serialized_body:
             raise AssertionError(f"{role} duplicate-review denial disclosed submitted patient names.")
 
+    # Reuse the synthetic patient to create an in-progress walk-in.
+    # The real ClinicalUser browser journey opens this queue item and retrieves
+    # patient identity through the department-scoped clinical API.
+    walk_in = require_status(
+        "Register synthetic patient as an OPD walk-in",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/walk-ins",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "departmentId": department_a,
+                "patientId": duplicate_patient_id,
+                "timeZoneId": "Asia/Kolkata",
+            },
+        ),
+        201,
+    )
+    queue_entry_id = walk_in.get("id")
+    if not queue_entry_id:
+        raise AssertionError("Synthetic walk-in registration returned no queue entry ID.")
+
+    require_status(
+        "Call synthetic OPD queue token",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/{queue_entry_id}/call",
+            tokens["patient-registrar"],
+            tenant_a,
+            {"reason": None},
+        ),
+        200,
+    )
+    in_progress_queue_entry = require_status(
+        "Start synthetic OPD consultation",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/{queue_entry_id}/start",
+            tokens["patient-registrar"],
+            tenant_a,
+            {"reason": None},
+        ),
+        200,
+    )
+    if in_progress_queue_entry.get("status") != "InProgress":
+        raise AssertionError("Synthetic OPD walk-in did not reach the InProgress state.")
+
+    queue_date = in_progress_queue_entry.get("queueDateLocal")
+    if not queue_date:
+        raise AssertionError("Synthetic OPD queue entry did not return its hospital-local service date.")
+    department_queue_path = (
+        f"/api/v1/hospitals/{hospital_a}/queue"
+        f"?departmentId={department_a}&date={queue_date}&page=1&pageSize=50"
+    )
+
+    registrar_queue = require_status(
+        "PatientRegistrar can read the assigned hospital department queue",
+        api.call("GET", department_queue_path, tokens["patient-registrar"], tenant_a),
+        200,
+    )
+    registrar_queue_items = registrar_queue.get("items", [])
+    if not any(
+        item.get("id") == queue_entry_id and item.get("status") == "InProgress"
+        for item in registrar_queue_items
+    ):
+        raise AssertionError("PatientRegistrar did not receive the synthetic in-progress queue entry.")
+
+    clinical_queue = require_status(
+        "ClinicalUser can read the assigned hospital department queue",
+        api.call("GET", department_queue_path, tokens["clinical-user"], tenant_a),
+        200,
+    )
+    clinical_queue_items = clinical_queue.get("items", [])
+    if not any(
+        item.get("id") == queue_entry_id and item.get("status") == "InProgress"
+        for item in clinical_queue_items
+    ):
+        raise AssertionError("ClinicalUser did not receive the synthetic in-progress queue entry.")
+
+    expect_api_status(
+        "FacilityManager cannot read the OPD department queue",
+        api,
+        "GET",
+        department_queue_path,
+        tokens["facility-manager"],
+        tenant_a,
+        403,
+    )
+
+    # Verify the OPD billing workflow with real Keycloak-issued HospitalAdmin
+    # and PatientRegistrar identities. All visit, invoice and payment records
+    # are synthetic and short-lived in this isolated acceptance database.
+    service_code = f"CI-OPD-{suffix.upper()}"
+    service_item = require_status(
+        "HospitalAdmin can create a synthetic OPD billing service item",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/billing/service-items",
+            tokens["shared"],
+            tenant_a,
+            {
+                "code": service_code,
+                "name": "CI OPD Consultation",
+                "category": "Consultation",
+                "unitPrice": 500.0,
+                "isActive": True,
+            },
+        ),
+        201,
+    )
+    service_item_id = service_item.get("id")
+    if not service_item_id:
+        raise AssertionError("Synthetic OPD billing service item returned no ID.")
+
+    invoice_path = f"/api/v1/hospitals/{hospital_a}/billing/invoices"
+    invoice = require_status(
+        "PatientRegistrar can issue an invoice for the in-progress OPD visit",
+        api.call(
+            "POST",
+            invoice_path,
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "queueEntryId": queue_entry_id,
+                "lines": [{"serviceItemId": service_item_id, "quantity": 1}],
+            },
+        ),
+        201,
+    )
+    invoice_id = invoice.get("id")
+    invoice_number = invoice.get("invoiceNumber")
+    if not invoice_id or not invoice_number:
+        raise AssertionError("Synthetic OPD invoice did not return its identity and invoice number.")
+    if invoice.get("status") != "Issued" or invoice.get("subtotal") != 500.0:
+        raise AssertionError(f"Synthetic OPD invoice has an unexpected initial state: {invoice!r}")
+
+    invoice_for_visit = require_status(
+        "PatientRegistrar can resume the existing visit invoice",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/visits/{queue_entry_id}/invoice",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if invoice_for_visit.get("id") != invoice_id:
+        raise AssertionError("Visit-to-invoice lookup did not return the issued invoice.")
+
+    duplicate_invoice_status, _, _ = api.call(
+        "POST",
+        invoice_path,
+        tokens["patient-registrar"],
+        tenant_a,
+        {
+            "queueEntryId": queue_entry_id,
+            "lines": [{"serviceItemId": service_item_id, "quantity": 1}],
+        },
+    )
+    if duplicate_invoice_status != 409:
+        raise AssertionError(
+            f"Duplicate invoice issue must return HTTP 409; received {duplicate_invoice_status}."
+        )
+
+    expect_api_status(
+        "FacilityManager cannot issue an OPD invoice",
+        api,
+        "POST",
+        invoice_path,
+        tokens["facility-manager"],
+        tenant_a,
+        403,
+        {
+            "queueEntryId": queue_entry_id,
+            "lines": [{"serviceItemId": service_item_id, "quantity": 1}],
+        },
+    )
+
+    payments_path = f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}/payments"
+    partial_payment = require_status(
+        "PatientRegistrar can record a partial OPD cash payment",
+        api.call(
+            "POST",
+            payments_path,
+            tokens["patient-registrar"],
+            tenant_a,
+            {"amount": 200.0, "method": "Cash", "reference": None},
+        ),
+        201,
+    )
+    partial_invoice = require_status(
+        "PatientRegistrar can read the partially settled OPD invoice",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        partial_invoice.get("status") != "PartiallyPaid"
+        or partial_invoice.get("amountPaid") != 200.0
+        or partial_invoice.get("balanceDue") != 300.0
+    ):
+        raise AssertionError(f"OPD partial settlement has an unexpected state: {partial_invoice!r}")
+
+    payment_reference = f"CI-UPI-{suffix.upper()}"
+    final_payment = require_status(
+        "PatientRegistrar can settle the remaining OPD invoice balance",
+        api.call(
+            "POST",
+            payments_path,
+            tokens["patient-registrar"],
+            tenant_a,
+            {"amount": 300.0, "method": "UPI", "reference": payment_reference},
+        ),
+        201,
+    )
+    final_payment_id = final_payment.get("id")
+    if not final_payment_id:
+        raise AssertionError("Final OPD payment did not return a payment ID.")
+
+    paid_invoice = require_status(
+        "PatientRegistrar can read the fully settled OPD invoice",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        paid_invoice.get("status") != "Paid"
+        or paid_invoice.get("amountPaid") != 500.0
+        or paid_invoice.get("balanceDue") != 0.0
+    ):
+        raise AssertionError(f"OPD invoice was not fully settled: {paid_invoice!r}")
+
+    payment_history = require_status(
+        "PatientRegistrar can read OPD invoice payment history",
+        api.call(
+            "GET",
+            payments_path,
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        not isinstance(payment_history, list)
+        or len(payment_history) != 2
+        or sum(item.get("amount", 0) for item in payment_history) != 500.0
+    ):
+        raise AssertionError(f"OPD payment history is incomplete or inconsistent: {payment_history!r}")
+
+    receipt = require_status(
+        "PatientRegistrar can retrieve the final OPD payment receipt",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/payments/{final_payment_id}/receipt",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    receipt_number = receipt.get("receiptNumber")
+    if (
+        not receipt_number
+        or receipt.get("invoiceNumber") != invoice_number
+        or receipt.get("amount") != 300.0
+        or receipt.get("method") != "UPI"
+        or receipt.get("reference") != payment_reference
+    ):
+        raise AssertionError(f"OPD payment receipt is inconsistent with the payment ledger: {receipt!r}")
+
+    daily_collection = require_status(
+        "PatientRegistrar can read the synthetic OPD daily collection",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/reports/daily-collection"
+            f"?businessDate={queue_date}&timeZoneId=Asia%2FKolkata",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        daily_collection.get("totalCollected") != 500.0
+        or daily_collection.get("paymentCount") != 2
+        or daily_collection.get("byMethod", {}).get("Cash") != 200.0
+        or daily_collection.get("byMethod", {}).get("UPI") != 300.0
+    ):
+        raise AssertionError(f"OPD daily collection does not match the synthetic payment ledger: {daily_collection!r}")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
@@ -859,13 +1160,68 @@ def run() -> None:
     browser_user_path.write_text(
         json.dumps(
             {
+                # Preserve the original shared identity for the full patient
+                # registration and cross-tenant browser journey.
                 "username": usernames["shared"],
                 "password": password,
+                # Separate synthetic identities allow real OIDC browser tests
+                # to exercise the actual persisted role for each workspace.
+                "users": {
+                    name: {"username": username, "password": password}
+                    for name, username in usernames.items()
+                },
+                "tenantAId": tenant_a,
+                "tenantBId": tenant_b,
+                "hospitalAId": hospital_a,
+                "hospitalBId": hospital_b,
+                "departmentAId": department_a,
+                "queueEntryId": queue_entry_id,
+                "queueTokenNumber": in_progress_queue_entry.get("tokenNumber"),
+                "queueDateLocal": in_progress_queue_entry.get("queueDateLocal"),
+                "patientFamilyName": duplicate_family_name,
+                "billingInvoiceNumber": invoice_number,
+                "billingReceiptNumber": receipt_number,
             }
         ),
         encoding="utf-8",
     )
     browser_user_path.chmod(0o600)
+
+    browser_manifest = json.loads(browser_user_path.read_text(encoding="utf-8"))
+    required_browser_roles = {
+        "platform",
+        "shared",
+        "facility-manager",
+        "patient-registrar",
+        "clinical-user",
+    }
+    configured_browser_roles = browser_manifest.get("users", {})
+    if not required_browser_roles.issubset(configured_browser_roles):
+        raise AssertionError(
+            "The ephemeral browser credential manifest is missing one or more persisted-role identities."
+        )
+    for role_name in required_browser_roles:
+        role_credentials = configured_browser_roles[role_name]
+        if not role_credentials.get("username") or not role_credentials.get("password"):
+            raise AssertionError(f"The ephemeral browser identity for {role_name} is incomplete.")
+    if not all(
+        browser_manifest.get(name)
+        for name in ("tenantAId", "tenantBId", "hospitalAId", "hospitalBId", "departmentAId")
+    ):
+        raise AssertionError("The ephemeral browser manifest is missing its synthetic tenant or organization IDs.")
+
+    required_opd_fixture_fields = (
+        "queueEntryId",
+        "queueTokenNumber",
+        "queueDateLocal",
+        "patientFamilyName",
+        "billingInvoiceNumber",
+        "billingReceiptNumber",
+    )
+    if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
+        raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
+
+    print("Prepared all persisted-role OIDC identities, a synthetic in-progress OPD visit, and a settled billing invoice/receipt for real browser acceptance.")
 
     print("Verified real Keycloak-issued tokens against HeapCare.Api issuer/audience validation.")
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
