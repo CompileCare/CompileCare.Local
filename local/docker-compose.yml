@@ -50,7 +50,7 @@ services:
 
   api:
     build:
-      context: ${COMPILECARE_API_PATH:-../../CompileCare.Api}
+      context: ${HEAPCARE_API_PATH:-../../HeapCare.Api}
       dockerfile: Dockerfile
       secrets:
         - nuget_credentials
@@ -83,7 +83,7 @@ services:
 
   web:
     build:
-      context: ${COMPILECARE_WEB_PATH:-../../CompileCare.Web}
+      context: ${HEAPCARE_WEB_PATH:-../../HeapCare.Web}
       dockerfile: Dockerfile
       args:
         VITE_OIDC_AUTHORITY: ${OIDC_AUTHORITY:-http://keycloak.localhost:8082/realms/compilecare}
