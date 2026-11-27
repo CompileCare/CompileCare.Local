@@ -371,7 +371,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: CompileCare/CompileCare.Api
-          ref: main
+          ref: migration/heapcare-branding
           path: CompileCare.Api
 
       - uses: actions/checkout@v4
@@ -407,12 +407,12 @@ jobs:
           set -Eeuo pipefail
           feed="$GITHUB_WORKSPACE/CompileCare.Api/.ci-nuget"
           mkdir -p "$feed"
-          dotnet pack src/CompileCare.Observability/CompileCare.Observability.csproj \
+          dotnet pack src/HeapCare.Observability/HeapCare.Observability.csproj \
             --configuration Release -p:Version=1.0.1 -o "$feed"
-          dotnet pack src/CompileCare.Observability.AspNetCore/CompileCare.Observability.AspNetCore.csproj \
+          dotnet pack src/HeapCare.Observability.AspNetCore/HeapCare.Observability.AspNetCore.csproj \
             --configuration Release -p:Version=1.0.1 -o "$feed"
-          test -s "$feed/CompileCare.Observability.1.0.1.nupkg"
-          test -s "$feed/CompileCare.Observability.AspNetCore.1.0.1.nupkg"
+          test -s "$feed/HeapCare.Observability.1.0.1.nupkg"
+          test -s "$feed/HeapCare.Observability.AspNetCore.1.0.1.nupkg"
           cat > "$GITHUB_WORKSPACE/CompileCare.Api/NuGet.Config" <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
@@ -423,7 +423,7 @@ jobs:
             </packageSources>
             <packageSourceMapping>
               <packageSource key="compilecare-ci">
-                <package pattern="CompileCare.*" />
+                <package pattern="HeapCare.*" />
               </packageSource>
               <packageSource key="nuget.org">
                 <package pattern="*" />
