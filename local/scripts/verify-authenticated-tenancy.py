@@ -794,6 +794,13 @@ def run() -> None:
             {
                 "username": usernames["shared"],
                 "password": password,
+                "users": {
+                    name: {
+                        "username": username,
+                        "password": password,
+                    }
+                    for name, username in usernames.items()
+                },
             }
         ),
         encoding="utf-8",
