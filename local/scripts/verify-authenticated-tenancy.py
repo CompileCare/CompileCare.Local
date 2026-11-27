@@ -636,7 +636,7 @@ def run() -> None:
         "FacilityManager": {"facility.read", "facility.write"},
         "FacilityViewer": {"facility.read"},
         "PatientRegistrar": {"facility.read", "patient.read", "patient.register", "patient.identifier.read", "appointment.manage", "queue.manage", "billing.invoice.manage", "billing.payment.manage"},
-        "ClinicalUser": {"facility.read", "patient.identity.read", "queue.read", "opd.encounter.read", "opd.encounter.manage", "opd.encounter.sign", "opd.encounter.amend"},
+        "ClinicalUser": {"facility.read", "patient.identity.read", "queue.read", "encounter.read", "encounter.manage", "encounter.sign", "encounter.amend"},
     }
     role_tokens = {
         "HospitalAdmin": tokens["shared"],
