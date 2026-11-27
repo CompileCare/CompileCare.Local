@@ -1,6 +1,6 @@
 # HeapCare Local
 
-> **Brand migration in progress:** HeapCare is the product brand. Repository names, .NET namespaces, package IDs, database identifiers, OIDC realm/client IDs, and deployment identifiers remain unchanged until their coordinated migration is implemented and validated. Do not infer that technical identifiers have already changed.
+> **Brand migration status:** HeapCare branding and local launcher names are updated. Existing GitHub repository paths, OIDC realm/client IDs, database names, connection-string keys, persistent Docker volume names and environment-variable names are intentionally retained for compatibility until their coordinated migration is verified.
 
 One-click local development environment for the HeapCare hospital platform.
 
