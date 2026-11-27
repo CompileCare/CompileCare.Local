@@ -465,7 +465,7 @@ def run() -> None:
     password = secrets.token_urlsafe(24)
     usernames = {
         name: f"heapcare-ci-{name}-{suffix}"
-        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-manager", "patient-registrar", "clinical-user")
+        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-viewer", "facility-manager", "patient-registrar", "clinical-user")
     }
     subjects: dict[str, str] = {}
     tokens: dict[str, str] = {}
@@ -515,6 +515,9 @@ def run() -> None:
     # role. These memberships are isolated to the synthetic CI tenant and are
     # used to verify the API's server-derived permission contexts end to end.
     role_memberships = {
+        "FacilityViewer": create_membership(
+            api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["facility-viewer"], "FacilityViewer"
+        ),
         "FacilityManager": create_membership(
             api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["facility-manager"], "FacilityManager"
         ),
@@ -645,6 +648,7 @@ def run() -> None:
     }
     role_tokens = {
         "HospitalAdmin": tokens["shared"],
+        "FacilityViewer": tokens["facility-viewer"],
         "FacilityManager": tokens["facility-manager"],
         "PatientRegistrar": tokens["patient-registrar"],
         "ClinicalUser": tokens["clinical-user"],
@@ -934,7 +938,38 @@ def run() -> None:
         },
     )
 
+    # Read and payment permissions remain distinct from clinical and
+    # facility read access, even within the same hospital tenant.
+    expect_api_status(
+        "ClinicalUser cannot read the cashier invoice",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+        tokens["clinical-user"],
+        tenant_a,
+        403,
+    )
+    expect_api_status(
+        "FacilityViewer cannot read the cashier invoice",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+        tokens["facility-viewer"],
+        tenant_a,
+        403,
+    )
+
     payments_path = f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}/payments"
+    expect_api_status(
+        "ClinicalUser cannot record an OPD payment",
+        api,
+        "POST",
+        payments_path,
+        tokens["clinical-user"],
+        tenant_a,
+        403,
+        {"amount": 100.0, "method": "Cash", "reference": None},
+    )
     partial_payment = require_status(
         "PatientRegistrar can record a partial OPD cash payment",
         api.call(
@@ -1191,6 +1226,7 @@ def run() -> None:
     required_browser_roles = {
         "platform",
         "shared",
+        "facility-viewer",
         "facility-manager",
         "patient-registrar",
         "clinical-user",
