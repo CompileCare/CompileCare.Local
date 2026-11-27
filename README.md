@@ -1,6 +1,6 @@
 # HeapCare Local
 
-> **Brand migration status:** HeapCare branding and local launcher names are updated. Existing GitHub repository paths, OIDC realm/client IDs, database names, connection-string keys, persistent Docker volume names and environment-variable names are intentionally retained for compatibility until their coordinated migration is verified.
+> **Brand migration status:** HeapCare branding and local launcher names are updated. Existing GitHub repository paths, OIDC realm/client IDs, database names, legacy connection-string fallbacks, persistent Docker volume names and environment-variable names are intentionally retained for compatibility until their coordinated migration is verified.
 
 One-click local development environment for the HeapCare hospital platform.
 
