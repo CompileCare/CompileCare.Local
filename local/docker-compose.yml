@@ -3,7 +3,7 @@ name: compilecare-local
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.2.5
-    container_name: compilecare-keycloak
+    container_name: heapcare-keycloak
     command: ["start-dev", "--http-port=8082", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
@@ -32,7 +32,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    container_name: compilecare-postgres
+    container_name: heapcare-postgres
     environment:
       POSTGRES_DB: compilecare
       POSTGRES_USER: compilecare
@@ -54,7 +54,7 @@ services:
       dockerfile: Dockerfile
       secrets:
         - nuget_credentials
-    container_name: compilecare-api
+    container_name: heapcare-api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
@@ -65,7 +65,7 @@ services:
       PlatformBootstrap__Secret: ${PLATFORM_BOOTSTRAP_SECRET:-}
       Database__ApplyMigrationsOnStartup: "true"
       Cors__AllowedOrigins__0: http://localhost:8080
-      OpenTelemetry__ServiceName: CompileCare.Api
+      OpenTelemetry__ServiceName: HeapCare.Api
     ports:
       - "127.0.0.1:8081:8080"
     depends_on:
@@ -93,7 +93,7 @@ services:
         VITE_OIDC_SCOPE: ${OIDC_SCOPE:-openid profile}
         VITE_API_BASE_URL: http://localhost:8081
         VITE_ENABLE_PLATFORM_BOOTSTRAP: "true"
-    container_name: compilecare-web
+    container_name: heapcare-web
     environment:
       CSP_CONNECT_SRC: ${CSP_CONNECT_SRC:-http://localhost:8081 http://keycloak.localhost:8082}
       CSP_FRAME_SRC: ${CSP_FRAME_SRC:-http://keycloak.localhost:8082}
