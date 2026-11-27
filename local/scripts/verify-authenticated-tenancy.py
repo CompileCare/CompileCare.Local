@@ -1221,7 +1221,7 @@ def run() -> None:
     if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
 
-    print("Prepared all persisted-role OIDC identities and a synthetic in-progress OPD visit for ClinicalUser browser acceptance.")
+    print("Prepared all persisted-role OIDC identities, a synthetic in-progress OPD visit, and a settled billing invoice/receipt for real browser acceptance.")
 
     print("Verified real Keycloak-issued tokens against HeapCare.Api issuer/audience validation.")
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
