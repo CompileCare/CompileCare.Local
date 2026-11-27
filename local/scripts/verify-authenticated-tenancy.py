@@ -756,6 +756,53 @@ def run() -> None:
         if "HeapCare" in serialized_body or duplicate_family_name in serialized_body:
             raise AssertionError(f"{role} duplicate-review denial disclosed submitted patient names.")
 
+    # Reuse the synthetic patient to create an in-progress walk-in.
+    # The real ClinicalUser browser journey opens this queue item and retrieves
+    # patient identity through the department-scoped clinical API.
+    walk_in = require_status(
+        "Register synthetic patient as an OPD walk-in",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/walk-ins",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "departmentId": department_a,
+                "patientId": duplicate_patient_id,
+                "timeZoneId": "Asia/Kolkata",
+            },
+        ),
+        201,
+    )
+    queue_entry_id = walk_in.get("id")
+    if not queue_entry_id:
+        raise AssertionError("Synthetic walk-in registration returned no queue entry ID.")
+
+    require_status(
+        "Call synthetic OPD queue token",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/{queue_entry_id}/call",
+            tokens["patient-registrar"],
+            tenant_a,
+            {"reason": None},
+        ),
+        200,
+    )
+    in_progress_queue_entry = require_status(
+        "Start synthetic OPD consultation",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/queue/{queue_entry_id}/start",
+            tokens["patient-registrar"],
+            tenant_a,
+            {"reason": None},
+        ),
+        200,
+    )
+    if in_progress_queue_entry.get("status") != "InProgress":
+        raise AssertionError("Synthetic OPD walk-in did not reach the InProgress state.")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
@@ -879,6 +926,9 @@ def run() -> None:
                 "hospitalAId": hospital_a,
                 "hospitalBId": hospital_b,
                 "departmentAId": department_a,
+                "queueEntryId": queue_entry_id,
+                "queueTokenNumber": in_progress_queue_entry.get("tokenNumber"),
+                "queueDateLocal": in_progress_queue_entry.get("queueDateLocal"),
             }
         ),
         encoding="utf-8",
