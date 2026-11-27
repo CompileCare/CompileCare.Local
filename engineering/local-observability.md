@@ -1,10 +1,10 @@
-# CompileCare local observability
+# HeapCare local observability
 
-This optional Compose overlay connects CompileCare.Api to the shared observability components for local development. It is intended for synthetic/test data only.
+This optional Compose overlay connects HeapCare.Api to the shared observability components for local development. It is intended for synthetic/test data only.
 
 ## Start the full local stack with observability
 
-From the CompileCare.Local repository root:
+From the HeapCare local environment repository root:
 
 ```bash
 docker compose --env-file local/.env \
@@ -19,11 +19,11 @@ The overlay leaves the standard local stack unchanged when it is not supplied. I
 
 | Signal | UI / endpoint | What to use it for |
 |---|---|---|
-| Structured logs | http://localhost:5601 (Kibana) | The CompileCare Logs data view (`compilecare-logs-*`, time field `@timestamp`) is provisioned by the local stack verifier; use Discover to search by service, environment, correlation ID or audit action |
-| Metrics | http://localhost:9090 (Prometheus) | Query API and collector metrics; inspect the compilecare-api and compilecare-otel-collector scrape targets |
-| Distributed traces | http://localhost:16686 (Jaeger) | Select the CompileCare.Api service and inspect request traces |
+| Structured logs | http://localhost:5601 (Kibana) | The HeapCare Logs data view (`compilecare-logs-*`, time field `@timestamp`) is provisioned by the local stack verifier; use Discover to search by service, environment, correlation ID or audit action |
+| Metrics | http://localhost:9090 (Prometheus) | Query API and collector metrics; inspect the heapcare-api and heapcare-otel-collector scrape targets |
+| Distributed traces | http://localhost:16686 (Jaeger) | Select the HeapCare.Api service and inspect request traces |
 | Raw API metrics | http://localhost:8081/metrics | Verify the API Prometheus scrape endpoint directly |
-| Collector OTLP gRPC | http://localhost:4317 | OTLP gRPC receiver used by CompileCare.Api |
+| Collector OTLP gRPC | http://localhost:4317 | OTLP gRPC receiver used by HeapCare.Api |
 | Collector OTLP HTTP | http://localhost:4318 | OTLP HTTP Protobuf receiver for compatible local/test senders |
 | API health | http://localhost:8081/health/live and http://localhost:8081/health/ready | Verify process and dependency health |
 
@@ -37,9 +37,9 @@ docker compose --env-file local/.env \
 
 ## Verify the pipeline
 
-1. Run `bash local/scripts/verify-stack.sh`; it provisions or verifies the CompileCare Logs Kibana data view automatically.
+1. Run `bash local/scripts/verify-stack.sh`; it provisions or verifies the HeapCare Logs Kibana data view automatically.
 2. Open the API root and readiness endpoints; confirm the API responds.
-3. Confirm `CompileCare.Api` and its Npgsql database operation appear in Jaeger.
+3. Confirm `HeapCare.Api` and its Npgsql database operation appear in Jaeger.
 4. Confirm API request metrics arrive through the Collector Prometheus exporter, separately from the direct API scrape.
 5. Search the `compilecare-logs-*` data view in Kibana and correlate a synthetic request using its correlation ID.
 6. Confirm no patient payloads, access tokens, credentials or other PHI are entered into test data or saved in screenshots/reports.
