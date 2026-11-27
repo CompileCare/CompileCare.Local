@@ -51,7 +51,7 @@ The exact commit SHAs checked out by the run must be recorded in the completed e
 
 ## Evidence record
 
-**Status:** Two hosted full-stack acceptance runs passed on 2026-11-27. The second run verified the post-PR #65 Web baseline and recorded exact cross-repository commit SHAs.
+**Status:** Two hosted full-stack acceptance runs passed on 2026-11-27. A third run is triggered to verify the latest Web main after PR #67 and record its exact repository SHAs.
 
 Record after the run completes:
 
@@ -97,3 +97,14 @@ A successful CI run must not be described as production approval or as closure o
 - Cleanup: GitHub Actions post-job cleanup completed successfully for the isolated job.
 
 **Acceptance boundary:** this run verifies the synthetic Linux CI stack and browser authentication. It does not close manual Mac/Windows launcher acceptance, manual accessibility/screen-reader review, clinical workflow visual acceptance, production ingress/TLS, provider-native PostgreSQL PITR/restore, signing-key rotation or hospital pilot sign-off.
+
+
+### Current re-verification target
+
+This run is intended to include the latest merged mainline changes:
+
+- API: persisted authorization regressions through PR #100.
+- Web: route-level workspaces and extracted reception, patient registration, appointment booking, walk-in and queue components through PR #67.
+- Observability: shared instrumentation packages from the current main branch.
+
+The CI job records exact repository SHAs before building. Append the run URL, result and SHA list after completion; do not infer the checked-out commits from PR merge times.
