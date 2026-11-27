@@ -632,7 +632,7 @@ def run() -> None:
     # Keycloak server. The API must derive the exact expected grants from the
     # persisted membership; token claims are not an authorization source.
     expected_role_permissions = {
-        "HospitalAdmin": {"facility.read", "facility.write", "facility.delete", "patient.read", "patient.register", "appointment.manage", "opd.encounter.sign", "audit.read"},
+        "HospitalAdmin": {"facility.read", "facility.write", "facility.delete", "patient.read", "patient.register", "appointment.manage", "audit.read"},
         "FacilityManager": {"facility.read", "facility.write"},
         "FacilityViewer": {"facility.read"},
         "PatientRegistrar": {"facility.read", "patient.read", "patient.register", "patient.identifier.read", "appointment.manage", "queue.manage", "billing.invoice.manage", "billing.payment.manage"},
