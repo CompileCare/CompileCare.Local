@@ -1,6 +1,6 @@
 # HeapCare Local
 
-> **Brand migration status:** HeapCare branding and local launcher names are updated. Existing GitHub repository paths, OIDC realm/client IDs, database names, legacy connection-string fallbacks, persistent Docker volume names and environment-variable names are intentionally retained for compatibility until their coordinated migration is verified.
+> **Migration status:** HeapCare branding, local checkout directories, launcher names, container identities and HEAPCARE_* path variables are in place. Legacy COMPILECARE_* path variables are still accepted by the launchers. Existing Keycloak realm/client IDs, database names, legacy connection-string fallback and persistent Docker volume names are intentionally retained for compatibility.
 
 One-click local development environment for the HeapCare hospital platform.
 
@@ -15,7 +15,7 @@ This repository orchestrates the API, Web application, PostgreSQL and a preconfi
 
 1. Docker Desktop installed and running.
 2. Git and GitHub CLI installed and authenticated (`gh auth login`) with access to the CompileCare organization repositories.
-3. The GitHub CLI token must have `read:packages` access for the private CompileCare NuGet feed. The launcher requests this scope and stores the resulting credentials in the ignored `local/.secrets/` directory.
+3. The GitHub CLI token must have `read:packages` access for the private GitHub Packages feed under the current CompileCare organization owner. The launcher requests this scope and stores the resulting credentials in the ignored `local/.secrets/` directory.
 
 Do not use production credentials or real patient data in local development.
 
