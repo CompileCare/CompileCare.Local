@@ -169,7 +169,7 @@ for ($i = 0; $i -lt 180; $i++) {
 if (-not $Ready) {
   & docker compose @ComposeArgs ps
   & docker compose @ComposeArgs logs --no-color --tail=150
-  throw "Timed out waiting for the complete CompileCare stack. Inspect the logs above."
+  throw "Timed out waiting for the complete HeapCare stack. Inspect the logs above."
 }
 
 & docker compose @ComposeArgs exec -T postgres pg_isready -U compilecare -d compilecare
@@ -178,7 +178,7 @@ if ($LASTEXITCODE -ne 0) { throw "PostgreSQL is not accepting connections." }
 Invoke-WebRequest http://localhost:8081/openapi/v1.json -UseBasicParsing -TimeoutSec 10 | Out-Null
 Invoke-WebRequest http://localhost:8081/metrics -UseBasicParsing -TimeoutSec 10 | Out-Null
 
-Write-Host "Provisioning the CompileCare Logs Kibana data view..."
+Write-Host "Provisioning the HeapCare Logs Kibana data view..."
 & $Python @PythonPrefix (Join-Path $Local "scripts/provision-kibana-data-view.py") --base-url http://localhost:5601
 if ($LASTEXITCODE -ne 0) { throw "Could not provision the Kibana data view." }
 
