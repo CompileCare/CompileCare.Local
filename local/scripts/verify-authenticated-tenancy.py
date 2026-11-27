@@ -845,6 +845,213 @@ def run() -> None:
         403,
     )
 
+    # Verify the OPD billing workflow with real Keycloak-issued HospitalAdmin
+    # and PatientRegistrar identities. All visit, invoice and payment records
+    # are synthetic and short-lived in this isolated acceptance database.
+    service_code = f"CI-OPD-{suffix.upper()}"
+    service_item = require_status(
+        "HospitalAdmin can create a synthetic OPD billing service item",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/billing/service-items",
+            tokens["shared"],
+            tenant_a,
+            {
+                "code": service_code,
+                "name": "CI OPD Consultation",
+                "category": "Consultation",
+                "unitPrice": 500.0,
+                "isActive": True,
+            },
+        ),
+        201,
+    )
+    service_item_id = service_item.get("id")
+    if not service_item_id:
+        raise AssertionError("Synthetic OPD billing service item returned no ID.")
+
+    invoice_path = f"/api/v1/hospitals/{hospital_a}/billing/invoices"
+    invoice = require_status(
+        "PatientRegistrar can issue an invoice for the in-progress OPD visit",
+        api.call(
+            "POST",
+            invoice_path,
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "queueEntryId": queue_entry_id,
+                "lines": [{"serviceItemId": service_item_id, "quantity": 1}],
+            },
+        ),
+        201,
+    )
+    invoice_id = invoice.get("id")
+    invoice_number = invoice.get("invoiceNumber")
+    if not invoice_id or not invoice_number:
+        raise AssertionError("Synthetic OPD invoice did not return its identity and invoice number.")
+    if invoice.get("status") != "Issued" or invoice.get("subtotal") != 500.0:
+        raise AssertionError(f"Synthetic OPD invoice has an unexpected initial state: {invoice!r}")
+
+    invoice_for_visit = require_status(
+        "PatientRegistrar can resume the existing visit invoice",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/visits/{queue_entry_id}/invoice",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if invoice_for_visit.get("id") != invoice_id:
+        raise AssertionError("Visit-to-invoice lookup did not return the issued invoice.")
+
+    duplicate_invoice_status, _, _ = api.call(
+        "POST",
+        invoice_path,
+        tokens["patient-registrar"],
+        tenant_a,
+        {
+            "queueEntryId": queue_entry_id,
+            "lines": [{"serviceItemId": service_item_id, "quantity": 1}],
+        },
+    )
+    if duplicate_invoice_status != 409:
+        raise AssertionError(
+            f"Duplicate invoice issue must return HTTP 409; received {duplicate_invoice_status}."
+        )
+
+    expect_api_status(
+        "FacilityManager cannot issue an OPD invoice",
+        api,
+        "POST",
+        invoice_path,
+        tokens["facility-manager"],
+        tenant_a,
+        403,
+        {
+            "queueEntryId": queue_entry_id,
+            "lines": [{"serviceItemId": service_item_id, "quantity": 1}],
+        },
+    )
+
+    payments_path = f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}/payments"
+    partial_payment = require_status(
+        "PatientRegistrar can record a partial OPD cash payment",
+        api.call(
+            "POST",
+            payments_path,
+            tokens["patient-registrar"],
+            tenant_a,
+            {"amount": 200.0, "method": "Cash", "reference": None},
+        ),
+        201,
+    )
+    partial_invoice = require_status(
+        "PatientRegistrar can read the partially settled OPD invoice",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        partial_invoice.get("status") != "PartiallyPaid"
+        or partial_invoice.get("amountPaid") != 200.0
+        or partial_invoice.get("balanceDue") != 300.0
+    ):
+        raise AssertionError(f"OPD partial settlement has an unexpected state: {partial_invoice!r}")
+
+    payment_reference = f"CI-UPI-{suffix.upper()}"
+    final_payment = require_status(
+        "PatientRegistrar can settle the remaining OPD invoice balance",
+        api.call(
+            "POST",
+            payments_path,
+            tokens["patient-registrar"],
+            tenant_a,
+            {"amount": 300.0, "method": "UPI", "reference": payment_reference},
+        ),
+        201,
+    )
+    final_payment_id = final_payment.get("id")
+    if not final_payment_id:
+        raise AssertionError("Final OPD payment did not return a payment ID.")
+
+    paid_invoice = require_status(
+        "PatientRegistrar can read the fully settled OPD invoice",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        paid_invoice.get("status") != "Paid"
+        or paid_invoice.get("amountPaid") != 500.0
+        or paid_invoice.get("balanceDue") != 0.0
+    ):
+        raise AssertionError(f"OPD invoice was not fully settled: {paid_invoice!r}")
+
+    payment_history = require_status(
+        "PatientRegistrar can read OPD invoice payment history",
+        api.call(
+            "GET",
+            payments_path,
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        not isinstance(payment_history, list)
+        or len(payment_history) != 2
+        or sum(item.get("amount", 0) for item in payment_history) != 500.0
+    ):
+        raise AssertionError(f"OPD payment history is incomplete or inconsistent: {payment_history!r}")
+
+    receipt = require_status(
+        "PatientRegistrar can retrieve the final OPD payment receipt",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/payments/{final_payment_id}/receipt",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    receipt_number = receipt.get("receiptNumber")
+    if (
+        not receipt_number
+        or receipt.get("invoiceNumber") != invoice_number
+        or receipt.get("amount") != 300.0
+        or receipt.get("method") != "UPI"
+        or receipt.get("reference") != payment_reference
+    ):
+        raise AssertionError(f"OPD payment receipt is inconsistent with the payment ledger: {receipt!r}")
+
+    daily_collection = require_status(
+        "PatientRegistrar can read the synthetic OPD daily collection",
+        api.call(
+            "GET",
+            f"/api/v1/hospitals/{hospital_a}/billing/reports/daily-collection"
+            f"?businessDate={queue_date}&timeZoneId=Asia%2FKolkata",
+            tokens["patient-registrar"],
+            tenant_a,
+        ),
+        200,
+    )
+    if (
+        daily_collection.get("totalCollected") != 500.0
+        or daily_collection.get("paymentCount") != 2
+        or daily_collection.get("byMethod", {}).get("Cash") != 200.0
+        or daily_collection.get("byMethod", {}).get("UPI") != 300.0
+    ):
+        raise AssertionError(f"OPD daily collection does not match the synthetic payment ledger: {daily_collection!r}")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
