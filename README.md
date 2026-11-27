@@ -90,7 +90,7 @@ The script checks all nine application and observability services, PostgreSQL re
 
 The Local GitHub Actions full-stack job additionally runs `local/scripts/verify-authenticated-tenancy.py` against the isolated nine-service Compose stack. It creates a temporary Keycloak client used only by CI, obtains real Keycloak-issued access tokens, bootstraps a platform operator, creates two tenants and persists different roles for the same synthetic identity. It then verifies API issuer/audience validation, tenant-specific permissions, hospital data isolation, cross-tenant membership mutation denial, membership revocation/reactivation and the current-user tenant-context response against PostgreSQL.
 
-This script requires `COMPILECARE_CI_ACCEPTANCE=1` and is deliberately restricted to the ephemeral CI environment. It uses no patient or billing records, does not change the checked-in `compilecare-web` PKCE client and must not be run against a persistent developer or production environment. The workflow removes its isolated Docker project and volumes after the job.
+This script requires `HEAPCARE_CI_ACCEPTANCE=1` and is deliberately restricted to the ephemeral CI environment. It uses no patient or billing records, does not change the checked-in `compilecare-web` PKCE client and must not be run against a persistent developer or production environment. The workflow removes its isolated Docker project and volumes after the job.
 
 ## Stop
 
