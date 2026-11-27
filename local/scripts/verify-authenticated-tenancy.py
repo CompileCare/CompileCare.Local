@@ -533,6 +533,11 @@ def run() -> None:
         api, tokens["tenant-b-admin"], tenant_b, "CI Hospital B", f"B-{suffix.upper()}"
     )
 
+    department_a = create_department(
+        api, tokens["shared"], tenant_a, hospital_a,
+        "CI Department A", f"DA-{suffix.upper()}"
+    )
+
     department_b = create_department(
         api, tokens["tenant-b-admin"], tenant_b, hospital_b,
         "CI Department B", f"DB-{suffix.upper()}"
@@ -859,8 +864,21 @@ def run() -> None:
     browser_user_path.write_text(
         json.dumps(
             {
+                # Preserve the original shared identity for the full patient
+                # registration and cross-tenant browser journey.
                 "username": usernames["shared"],
                 "password": password,
+                # Separate synthetic identities allow real OIDC browser tests
+                # to exercise the actual persisted role for each workspace.
+                "users": {
+                    name: {"username": username, "password": password}
+                    for name, username in usernames.items()
+                },
+                "tenantAId": tenant_a,
+                "tenantBId": tenant_b,
+                "hospitalAId": hospital_a,
+                "hospitalBId": hospital_b,
+                "departmentAId": department_a,
             }
         ),
         encoding="utf-8",
