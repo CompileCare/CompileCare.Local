@@ -465,7 +465,7 @@ def run() -> None:
     password = secrets.token_urlsafe(24)
     usernames = {
         name: f"heapcare-ci-{name}-{suffix}"
-        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-manager", "patient-registrar", "clinical-user")
+        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-viewer", "facility-manager", "patient-registrar", "clinical-user")
     }
     subjects: dict[str, str] = {}
     tokens: dict[str, str] = {}
@@ -515,6 +515,9 @@ def run() -> None:
     # role. These memberships are isolated to the synthetic CI tenant and are
     # used to verify the API's server-derived permission contexts end to end.
     role_memberships = {
+        "FacilityViewer": create_membership(
+            api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["facility-viewer"], "FacilityViewer"
+        ),
         "FacilityManager": create_membership(
             api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["facility-manager"], "FacilityManager"
         ),
@@ -645,6 +648,7 @@ def run() -> None:
     }
     role_tokens = {
         "HospitalAdmin": tokens["shared"],
+        "FacilityViewer": tokens["facility-viewer"],
         "FacilityManager": tokens["facility-manager"],
         "PatientRegistrar": tokens["patient-registrar"],
         "ClinicalUser": tokens["clinical-user"],
@@ -1222,6 +1226,7 @@ def run() -> None:
     required_browser_roles = {
         "platform",
         "shared",
+        "facility-viewer",
         "facility-manager",
         "patient-registrar",
         "clinical-user",
