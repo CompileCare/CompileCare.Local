@@ -46,7 +46,7 @@ if grep -Fqi "connect-src 'self' *" <<<"$web_headers"; then
 fi
 echo "  ✓ Web enforces the configured CSP for local API and Keycloak origins"
 api_response=$(curl_local http://localhost:8081/)
-python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("service") == "CompileCare.Api" and data.get("status") == "ready", "Unexpected API readiness payload"' <<<"$api_response"
+python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("service") == "HeapCare.Api" and data.get("status") == "ready", "Unexpected API readiness payload"' <<<"$api_response"
 curl_local http://localhost:8081/openapi/v1.json >/dev/null
 echo "  ✓ Web, API readiness and Development OpenAPI respond"
 
@@ -62,7 +62,7 @@ curl_local http://localhost:9200/_cluster/health >/dev/null
 curl_local http://localhost:8889/metrics >/dev/null
 echo "  ✓ Prometheus, Jaeger, Elasticsearch and Collector metrics endpoint respond"
 
-echo "Provisioning the CompileCare Logs Kibana data view (waits for Kibana readiness)..."
+echo "Provisioning the HeapCare Logs Kibana data view (waits for Kibana readiness)..."
 python3 local/scripts/provision-kibana-data-view.py --base-url http://localhost:5601
 curl_local http://localhost:5601/api/status >/dev/null
 echo "  ✓ Kibana is ready and data view compilecare-logs-* is provisioned"
@@ -103,8 +103,8 @@ while time.monotonic() < deadline:
     try:
         body, _ = get(JAEGER + "/api/v3/services")
         services = json.loads(body).get("services", [])
-        if "CompileCare.Api" in services:
-            op_body, _ = get(JAEGER + "/api/v3/operations?service=CompileCare.Api")
+        if "HeapCare.Api" in services:
+            op_body, _ = get(JAEGER + "/api/v3/operations?service=HeapCare.Api")
             operations = json.loads(op_body).get("operations", [])
             operation_names = [item.get("name", "") for item in operations]
             if any(name.startswith("CONNECT ") or name.lower() == "postgresql" for name in operation_names):
@@ -114,7 +114,7 @@ while time.monotonic() < deadline:
     time.sleep(2)
 else:
     raise RuntimeError(
-        "CompileCare.Api traces did not reach Jaeger with an Npgsql database operation. "
+        "HeapCare.Api traces did not reach Jaeger with an Npgsql database operation. "
         f"services={services!r}, operations={operations!r}"
     )
 
@@ -133,13 +133,13 @@ while time.monotonic() < metric_deadline:
 else:
     raise RuntimeError("No ASP.NET Core request-duration metric reached the Collector Prometheus exporter.")
 
-print("Verified CompileCare.Api in Jaeger with an Npgsql database span.")
+print("Verified HeapCare.Api in Jaeger with an Npgsql database span.")
 print("Verified ASP.NET Core request metrics arrive through the OTLP Collector.")
 print(f"Jaeger operations: {[item.get('name') for item in operations]}")
 PY
 echo "  ✓ API traces, Npgsql database spans and Collector-fed API metrics verified"
 
 echo
-echo "CompileCare full local infrastructure smoke checks passed."
+echo "HeapCare full local infrastructure smoke checks passed."
 echo "Still required: browser sign-in, persisted tenant/RBAC checks, patient workflows, UI visual review, telemetry end-to-end correlation and production security acceptance."
 echo "Use synthetic records only. These checks do not certify production readiness."
