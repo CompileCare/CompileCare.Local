@@ -273,7 +273,7 @@ jobs:
                       {"key": "service.name", "value": {"stringValue": "HeapCare.Api.CI"}}
                   ]},
                   "scopeMetrics": [{
-                      "scope": {"name": "compilecare-ci-smoke"},
+                      "scope": {"name": "heapcare-ci-smoke"},
                       "metrics": [{
                           "name": "heapcare_ci_smoke_total",
                           "sum": {
@@ -298,7 +298,7 @@ jobs:
                       {"key": "service.name", "value": {"stringValue": "HeapCare.Api.CI"}}
                   ]},
                   "scopeSpans": [{
-                      "scope": {"name": "compilecare-ci-smoke"},
+                      "scope": {"name": "heapcare-ci-smoke"},
                       "spans": [{
                           "traceId": trace_id,
                           "spanId": span_id,
@@ -391,9 +391,15 @@ jobs:
         run: |
           set -Eeuo pipefail
           for repository in CompileCare.Local CompileCare.Api CompileCare.Web CompileCare.Observability; do
-            echo "===== ${repository} ====="
-            git -C "$GITHUB_WORKSPACE/$repository" rev-parse HEAD
-            git -C "$GITHUB_WORKSPACE/$repository" log -1 --format='%H %s'
+            case "$repository" in
+              CompileCare.Local) checkout="$GITHUB_WORKSPACE/CompileCare.Local" ;;
+              CompileCare.Api) checkout="$GITHUB_WORKSPACE/HeapCare.Api" ;;
+              CompileCare.Web) checkout="$GITHUB_WORKSPACE/HeapCare.Web" ;;
+              CompileCare.Observability) checkout="$GITHUB_WORKSPACE/HeapCare.Observability" ;;
+            esac
+            echo "===== ${repository} (HeapCare checkout: $checkout) ====="
+            git -C "$checkout" rev-parse HEAD
+            git -C "$checkout" log -1 --format='%H %s'
           done
 
       - name: Install .NET SDK for the shared observability projects
@@ -418,11 +424,11 @@ jobs:
           <configuration>
             <packageSources>
               <clear />
-              <add key="compilecare-ci" value=".ci-nuget" />
+              <add key="heapcare-ci" value=".ci-nuget" />
               <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
             </packageSources>
             <packageSourceMapping>
-              <packageSource key="compilecare-ci">
+              <packageSource key="heapcare-ci">
                 <package pattern="HeapCare.*" />
               </packageSource>
               <packageSource key="nuget.org">
