@@ -51,7 +51,7 @@ The exact commit SHAs checked out by the run must be recorded in the completed e
 
 ## Evidence record
 
-**Status:** Pending the pull-request workflow run for this verification-plan change.
+**Status:** First hosted full-stack acceptance passed on 2026-11-27; a second run is being triggered to verify the post-PR #65 Web baseline and record exact cross-repository commit SHAs.
 
 Record after the run completes:
 
@@ -72,3 +72,11 @@ Record after the run completes:
 - Clinical governance, privacy/legal review and hospital pilot sign-off.
 
 A successful CI run must not be described as production approval or as closure of these manual/operational gates.
+
+
+### Completed hosted run — 2026-11-27
+
+- Run: [CompileCare.Local full-stack verification #45944486631](https://github.com/CompileCare/CompileCare.Local/actions/runs/45944486631)
+- Result: **Success**. The full nine-service Compose stack built and started; the synthetic local stack smoke passed; real Keycloak-issued tokens passed API issuer/audience validation; persisted multi-tenant workflows passed; real OIDC Authorization Code + PKCE browser acceptance passed (1 test); isolated CI secrets and volumes were cleaned up successfully.
+- The run began before Web PR #65 was merged, so it validates the route-level workspace baseline from Web PR #64. A follow-up run is triggered by this PR to validate the extracted patient-registration component on the current Web main branch.
+- Exact checked-out API/Web/Observability SHAs were not explicitly printed by the first run. This PR adds a dedicated commit-SHA recording step before the next full-stack build; the next run's evidence record will capture those values rather than infer them from merge timestamps.
