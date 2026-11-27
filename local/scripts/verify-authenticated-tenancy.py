@@ -256,7 +256,7 @@ def create_user(admin: KeycloakAdmin, username: str, password: str) -> str:
         "enabled": True,
         "email": f"{username}@heapcare.invalid",
         "emailVerified": True,
-        "firstName": "CompileCare",
+        "firstName": "HeapCare",
         "lastName": "CI Acceptance",
         "credentials": [
             {"type": "password", "value": password, "temporary": False}
