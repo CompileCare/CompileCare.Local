@@ -54,10 +54,10 @@ jobs:
       - name: Validate Keycloak realm import
         run: |
           python -m py_compile local/scripts/configure-keycloak.py local/scripts/provision-kibana-data-view.py local/scripts/verify-authenticated-tenancy.py
-          python -m json.tool local/keycloak/heapcare-realm.json > /dev/null
+          python -m json.tool local/keycloak/compilecare-realm.json > /dev/null
           python - <<'PY'
           import json
-          with open("local/keycloak/heapcare-realm.json", encoding="utf-8") as file:
+          with open("local/keycloak/compilecare-realm.json", encoding="utf-8") as file:
               realm = json.load(file)
           assert realm["realm"] == "compilecare"
           client = next(item for item in realm["clients"] if item["clientId"] == "compilecare-web")
@@ -90,7 +90,7 @@ jobs:
             -e KC_HOSTNAME_STRICT=true \
             -e KC_HOSTNAME_STRICT_HTTPS=false \
             -e KC_HEALTH_ENABLED=true \
-            -v "$GITHUB_WORKSPACE/local/keycloak/heapcare-realm.json:/opt/keycloak/data/import/heapcare-realm.json:ro" \
+            -v "$GITHUB_WORKSPACE/local/keycloak/compilecare-realm.json:/opt/keycloak/data/import/compilecare-realm.json:ro" \
             quay.io/keycloak/keycloak:26.2.5 start-dev --http-port=8082 --import-realm
           ready=false
           for attempt in $(seq 1 90); do
