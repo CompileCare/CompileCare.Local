@@ -537,6 +537,7 @@ jobs:
             "${compose[@]}" exec -T postgres sh -ec 'PGPASSWORD="$POSTGRES_PASSWORD" dropdb --if-exists --username="$POSTGRES_USER" heapcare_ci_restore_verify' >/dev/null 2>&1 || true
             "${compose[@]}" exec -T postgres rm -f "$container_backup" >/dev/null 2>&1 || true
             rm -f "$backup"
+            rm -f "$RUNNER_TEMP/heapcare-postgres-ci.dump-list"
           }
           trap cleanup EXIT
 
