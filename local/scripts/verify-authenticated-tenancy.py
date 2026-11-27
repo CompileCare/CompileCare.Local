@@ -885,6 +885,8 @@ def run() -> None:
     )
     browser_user_path.chmod(0o600)
 
+    print("Prepared isolated credentials for all persisted-role real OIDC browser acceptance cases.")
+
     print("Verified real Keycloak-issued tokens against HeapCare.Api issuer/audience validation.")
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
