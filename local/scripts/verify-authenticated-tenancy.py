@@ -24,7 +24,7 @@ ENV_FILE = LOCAL_ROOT / ".env"
 KEYCLOAK = "http://keycloak.localhost:8082"
 REALM = "compilecare"
 API = "http://localhost:8081"
-CI_CLIENT_ID = "compilecare-ci-acceptance"
+CI_CLIENT_ID = "heapcare-ci-acceptance"
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -171,7 +171,7 @@ def admin_access_token(username: str, password: str) -> str:
 
 def create_ci_client(admin: KeycloakAdmin) -> str:
     scopes = require_status(
-        "Read CompileCare client scopes",
+        "Read HeapCare client scopes",
         admin.call("GET", f"/admin/realms/{REALM}/client-scopes"),
         200,
     )
@@ -184,7 +184,7 @@ def create_ci_client(admin: KeycloakAdmin) -> str:
         None,
     )
     if audience_scope is None:
-        raise RuntimeError("The CompileCare API audience client scope is missing.")
+        raise RuntimeError("The HeapCare API audience client scope is missing.")
     if basic_scope is None:
         raise RuntimeError("The Keycloak basic client scope is missing; access tokens require its Subject (sub) mapper.")
 
@@ -208,7 +208,7 @@ def create_ci_client(admin: KeycloakAdmin) -> str:
         f"/admin/realms/{REALM}/clients",
         {
             "clientId": CI_CLIENT_ID,
-            "name": "CompileCare ephemeral CI acceptance client",
+            "name": "HeapCare ephemeral CI acceptance client",
             "enabled": True,
             "protocol": "openid-connect",
             "publicClient": True,
@@ -254,7 +254,7 @@ def create_user(admin: KeycloakAdmin, username: str, password: str) -> str:
     payload = {
         "username": username,
         "enabled": True,
-        "email": f"{username}@compilecare.invalid",
+        "email": f"{username}@heapcare.invalid",
         "emailVerified": True,
         "firstName": "CompileCare",
         "lastName": "CI Acceptance",
@@ -432,7 +432,7 @@ def expect_api_status(
 
 
 def run() -> None:
-    if os.environ.get("COMPILECARE_CI_ACCEPTANCE") != "1":
+    if os.environ.get("HEAPCARE_CI_ACCEPTANCE") != "1":
         raise RuntimeError(
             "This script mutates Keycloak and PostgreSQL test data. "
             "Run it only from the isolated CI Compose workflow."
@@ -449,13 +449,13 @@ def run() -> None:
 
     # Confirm discovery and issuer before creating any identity.
     discovery = require_status(
-        "Read CompileCare OIDC discovery",
+        "Read HeapCare OIDC discovery",
         request(KEYCLOAK, f"/realms/{REALM}/.well-known/openid-configuration"),
         200,
     )
     issuer = discovery["issuer"]
     if issuer != f"{KEYCLOAK}/realms/{REALM}":
-        raise AssertionError(f"Unexpected CompileCare OIDC issuer: {issuer!r}")
+        raise AssertionError(f"Unexpected OIDC issuer: {issuer!r}")
 
     admin_token = admin_access_token(admin_username, admin_password)
     admin = KeycloakAdmin(KEYCLOAK, admin_token)
@@ -464,7 +464,7 @@ def run() -> None:
     suffix = secrets.token_hex(4)
     password = secrets.token_urlsafe(24)
     usernames = {
-        name: f"cc-ci-{name}-{suffix}"
+        name: f"heapcare-ci-{name}-{suffix}"
         for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared")
     }
     subjects: dict[str, str] = {}
@@ -713,9 +713,9 @@ def run() -> None:
     # Hand the same persisted two-tenant identity to the real browser PKCE
     # test through a runner-temporary file; never write credentials to the repo
     # or emit them into the Actions log.
-    browser_user_file = os.environ.get("COMPILECARE_BROWSER_TEST_USER_FILE")
+    browser_user_file = os.environ.get("HEAPCARE_BROWSER_TEST_USER_FILE")
     if not browser_user_file:
-        raise RuntimeError("COMPILECARE_BROWSER_TEST_USER_FILE must point to the runner-temporary browser credential file.")
+        raise RuntimeError("HEAPCARE_BROWSER_TEST_USER_FILE must point to the runner-temporary browser credential file.")
     browser_user_path = Path(browser_user_file)
     browser_user_path.parent.mkdir(parents=True, exist_ok=True)
     browser_user_path.write_text(
@@ -729,7 +729,7 @@ def run() -> None:
     )
     browser_user_path.chmod(0o600)
 
-    print("Verified real Keycloak-issued tokens against CompileCare.Api issuer/audience validation.")
+    print("Verified real Keycloak-issued tokens against HeapCare.Api issuer/audience validation.")
     print("Verified two PostgreSQL-persisted tenant memberships with different roles and permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
     print("Verified FacilityViewer patient registration, search, identity detail, duplicate review and department-scoped patient reads are denied with HTTP 403.")
