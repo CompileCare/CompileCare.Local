@@ -133,3 +133,11 @@ A passing hosted CI run is evidence for the exact repository SHAs checked out by
 ## HeapCare identity migration
 
 HeapCare is the product-facing brand. The local Compose project name, PostgreSQL database/role, Keycloak realm (`compilecare`), OIDC client/audience IDs, connection-string key, persistent volume names and existing `COMPILECARE_*` launcher variables are intentionally retained as compatibility contracts in this phase. Existing local Docker volumes and Keycloak users must not be deleted or silently recreated. A future identity-provider migration must provision the HeapCare realm and clients, migrate users/roles, verify issuer/audience and callback behavior, and only then retire the legacy realm. The GitHub organization and all 11 repository slugs have been renamed to HeapCare.
+
+### Real-OIDC appointment booking and check-in acceptance
+
+The merged HeapCare.Web real-Keycloak suite now extends the PatientRegistrar browser journey through the appointment workflow. HeapCare.Local prepares a separate synthetic patient and a future provider slot through the real staff, patient-registration and availability APIs; the browser must then search/select that patient, load the published slot, book it, and check it in through the visible workspace.
+
+The full-stack CI job checks out the current main of HeapCare.Api, HeapCare.Web and HeapCare.Observability, records their exact commit SHAs, and runs the suite against the isolated nine-service stack. Treat the journey as accepted only when the full-stack job passes on a Local commit whose recorded Web SHA includes the merged appointment booking/check-in change (Web main 3a029ad55f053223a9612d6038e30a6cb1e7e125 at merge).
+
+The fixture uses runner-local Keycloak identities and synthetic records only. It does not create clinical notes, enter treatment data, or use real patient information. The UI test's ordinary Web CI run validates suite compilation/discovery; only the Local full-stack job executes it against real Keycloak, API and PostgreSQL.
