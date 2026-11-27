@@ -4,6 +4,13 @@
 
 One-click local development environment for the HeapCare hospital platform.
 
+Clone the repository into a HeapCare-named local directory (the GitHub repository slug is still awaiting the administrative rename):
+
+```bash
+gh repo clone CompileCare/CompileCare.Local HeapCare.Local
+cd HeapCare.Local
+```
+
 This repository orchestrates the API, Web application, PostgreSQL and a preconfigured local Keycloak identity provider in Docker Compose. Hospital domain code remains in the API and Web repositories.
 
 ## Supported platforms
