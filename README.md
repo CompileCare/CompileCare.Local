@@ -112,3 +112,10 @@ docker compose --env-file local/.env -f local/docker-compose.yml -f local/docker
 The Web container now enforces CSP. The local Compose configuration explicitly allows the local API origin (`http://localhost:8081`) and Keycloak origin (`http://keycloak.localhost:8082`) for browser connections, and Keycloak for the silent-renew iframe. `ALLOW_INSECURE_CSP_ORIGINS=true` is set only by this local-development Compose file because the local identity/API endpoints use loopback HTTP.
 
 If you override `OIDC_AUTHORITY` or the Web API URL for a different local topology, also set `CSP_CONNECT_SRC` and `CSP_FRAME_SRC` in ignored `local/.env` to the corresponding bare origins (scheme, host and optional port only). Do not copy the local HTTP exception into production. Production Web containers must use HTTPS origins and must not set `ALLOW_INSECURE_CSP_ORIGINS`.
+
+
+## Cross-repository full-stack verification
+
+The pull-request workflow's Full nine-service Docker stack and API telemetry verification job checks the current main branches of CompileCare.Api, CompileCare.Web and CompileCare.Observability against this local Compose topology. It starts the nine-service stack with ephemeral credentials, validates infrastructure/observability, exercises real Keycloak-issued identities and persisted multi-tenant authorization, and runs the real OIDC Authorization Code + PKCE browser suite. See [the 2026-11-27 verification plan](qa/full-stack-verification-2026-11-27.md) for the scope and acceptance boundary.
+
+A passing hosted CI run is evidence for the exact repository SHAs checked out by that run. It is not a substitute for running the one-click launcher on the target developer Mac/Windows machines, manual accessibility/screen-reader review, provider-native production backup/PITR, or pilot sign-off.
