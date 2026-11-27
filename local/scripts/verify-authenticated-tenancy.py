@@ -929,6 +929,7 @@ def run() -> None:
                 "queueEntryId": queue_entry_id,
                 "queueTokenNumber": in_progress_queue_entry.get("tokenNumber"),
                 "queueDateLocal": in_progress_queue_entry.get("queueDateLocal"),
+                "patientFamilyName": duplicate_family_name,
             }
         ),
         encoding="utf-8",
