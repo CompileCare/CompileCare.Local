@@ -1523,6 +1523,25 @@ def run() -> None:
     if not cancellation_api_appointment_id:
         raise AssertionError("Synthetic cancellation appointment returned no ID.")
 
+    expect_api_status(
+        "FacilityManager cannot cancel a booked appointment",
+        api,
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}/cancel",
+        tokens["facility-manager"],
+        tenant_a,
+        403,
+    )
+    expect_api_status(
+        "ClinicalUser cannot cancel a booked appointment",
+        api,
+        "POST",
+        f"/api/v1/hospitals/{hospital_a}/appointments/{cancellation_api_appointment_id}/cancel",
+        tokens["clinical-user"],
+        tenant_a,
+        403,
+    )
+
     cancelled_api_appointment = require_status(
         "PatientRegistrar can cancel a booked appointment",
         api.call(
