@@ -684,6 +684,73 @@ def run() -> None:
         tokens["clinical-user"], tenant_a, 403
     )
 
+    # Exercise duplicate-candidate review with real Keycloak tokens and a
+    # synthetic patient. This verifies the persisted tenant role is evaluated
+    # by the API, not merely reflected in a UI permission fixture.
+    duplicate_family_name = f"Duplicate-{suffix}"
+    duplicate_patient = require_status(
+        "Register synthetic patient for duplicate-review acceptance",
+        api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/patients",
+            tokens["patient-registrar"],
+            tenant_a,
+            {
+                "givenName": "HeapCare",
+                "middleName": "Scope",
+                "familyName": duplicate_family_name,
+                "dateOfBirth": "1990-01-02",
+            },
+        ),
+        201,
+    )
+    duplicate_patient_id = duplicate_patient.get("id")
+    if not duplicate_patient_id:
+        raise AssertionError("Synthetic patient registration returned no patient ID.")
+
+    duplicate_review_payload = {
+        "givenName": "HeapCare",
+        "middleName": "Scope",
+        "familyName": duplicate_family_name,
+        "dateOfBirth": "1990-01-02",
+    }
+    duplicate_review_path = f"/api/v1/hospitals/{hospital_a}/patients/duplicate-candidates"
+    for role, role_token in (
+        ("HospitalAdmin", tokens["shared"]),
+        ("PatientRegistrar", tokens["patient-registrar"]),
+    ):
+        result = require_status(
+            f"{role} can review duplicate candidates",
+            api.call("POST", duplicate_review_path, role_token, tenant_a, duplicate_review_payload),
+            200,
+        )
+        candidates = result.get("candidates", [])
+        if result.get("evaluated") is not True or not any(
+            candidate.get("patientId") == duplicate_patient_id for candidate in candidates
+        ):
+            raise AssertionError(f"{role} did not receive the expected hospital-local duplicate candidate.")
+
+    denied_duplicate_reviews = (
+        ("FacilityManager", tokens["facility-manager"], tenant_a, hospital_a),
+        ("ClinicalUser", tokens["clinical-user"], tenant_a, hospital_a),
+        ("FacilityViewer", tokens["shared"], tenant_b, hospital_b),
+    )
+    for role, role_token, tenant_id, hospital_id in denied_duplicate_reviews:
+        status, body, _ = api.call(
+            "POST",
+            f"/api/v1/hospitals/{hospital_id}/patients/duplicate-candidates",
+            role_token,
+            tenant_id,
+            duplicate_review_payload,
+        )
+        if status != 403:
+            raise AssertionError(
+                f"{role} duplicate review must be forbidden; received HTTP {status}; response={body!r}"
+            )
+        serialized_body = json.dumps(body)
+        if "HeapCare" in serialized_body or duplicate_family_name in serialized_body:
+            raise AssertionError(f"{role} duplicate-review denial disclosed submitted patient names.")
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
