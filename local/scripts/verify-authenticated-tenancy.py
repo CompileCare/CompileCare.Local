@@ -1632,6 +1632,10 @@ def run() -> None:
                 "appointmentSlotStartsAtUtc": appointment_slot_starts_at_utc,
                 "appointmentPatientId": appointment_patient_id,
                 "appointmentPatientFamilyName": appointment_patient_family_name,
+                "clinicalQueueEntryId": clinical_queue_entry_id,
+                "clinicalQueueTokenNumber": started_clinical_queue.get("tokenNumber"),
+                "clinicalQueueDateLocal": started_clinical_queue.get("queueDateLocal"),
+                "clinicalPatientFamilyName": clinical_patient_family_name,
             }
         ),
         encoding="utf-8",
@@ -1674,6 +1678,10 @@ def run() -> None:
         "appointmentSlotStartsAtUtc",
         "appointmentPatientId",
         "appointmentPatientFamilyName",
+        "clinicalQueueEntryId",
+        "clinicalQueueTokenNumber",
+        "clinicalQueueDateLocal",
+        "clinicalPatientFamilyName",
     )
     if not all(browser_manifest.get(name) for name in required_opd_fixture_fields):
         raise AssertionError("The ephemeral browser manifest is missing its synthetic in-progress OPD queue fixture.")
