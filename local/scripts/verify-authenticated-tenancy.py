@@ -1076,6 +1076,8 @@ def run() -> None:
         403,
     )
 
+    print("Verified real Keycloak ClinicalUser draft, signature attribution, signed-note immutability, close, append-only amendment and PatientRegistrar denial using synthetic CI records.")
+
     # Verify the OPD billing workflow with real Keycloak-issued HospitalAdmin
     # and PatientRegistrar identities. All visit, invoice and payment records
     # are synthetic and short-lived in this isolated acceptance database.
