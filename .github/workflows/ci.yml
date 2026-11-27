@@ -81,7 +81,7 @@ jobs:
           PY
       - name: Smoke-test Keycloak realm import in Docker
         run: |
-          docker run -d --name compilecare-keycloak-ci \
+          docker run -d --name heapcare-keycloak-ci \
             -p 127.0.0.1:8082:8082 \
             -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
             -e KC_BOOTSTRAP_ADMIN_PASSWORD=LocalOnly-CI-Password-123! \
@@ -103,7 +103,7 @@ jobs:
             sleep 2
           done
           if [ "$ready" != "true" ]; then
-            docker logs compilecare-keycloak-ci
+            docker logs heapcare-keycloak-ci
             exit 1
           fi
           python - <<'PY'
@@ -185,7 +185,7 @@ jobs:
           assert {"basic", "profile", "email", "compilecare-api-audience"}.issubset(default_names), default_names
           print("Keycloak profile/email claims and default API audience scope verified.")
           PY
-          docker rm -f compilecare-keycloak-ci
+          docker rm -f heapcare-keycloak-ci
       - name: Validate OpenTelemetry Collector configuration
         run: |
           docker run --rm \
@@ -206,7 +206,7 @@ jobs:
           printf 'Username=ci;Password=placeholder;ValidAuthenticationTypes=Basic' > local/.secrets/nuget-source-credentials
           export HEAPCARE_API_PATH="$GITHUB_WORKSPACE"
           export HEAPCARE_WEB_PATH="$RUNNER_TEMP/HeapCare.Web"
-          compose=(--project-name compilecare-observability-ci --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml)
+          compose=(--project-name heapcare-observability-ci --env-file local/.env.example -f local/docker-compose.yml -f local/docker-compose.observability.yml)
           cleanup() {
             docker compose "${compose[@]}" down --volumes --remove-orphans || true
             rm -rf local/.secrets
@@ -256,7 +256,7 @@ jobs:
           assert any(
               view.get("title") == "compilecare-logs-*"
               for view in data_views.get("data_view", [])
-          ), "CompileCare Logs Kibana data view was not provisioned"
+          ), "HeapCare Logs Kibana data view was not provisioned"
           wait_for("http://localhost:9090/-/ready", "Prometheus")
           wait_for("http://localhost:16686/", "Jaeger")
           wait_for("http://localhost:8889/metrics", "OpenTelemetry Collector Prometheus exporter")
@@ -465,7 +465,7 @@ jobs:
           mkdir -p local/.secrets
           umask 077
           # The API Dockerfile always mounts this BuildKit secret. In this CI job,
-          # CompileCare.* packages are restored from .ci-nuget, so no GitHub token
+          # HeapCare.* packages are restored from .ci-nuget, so no GitHub token
           # or private package credential is needed or supplied.
           printf 'Username=ci;Password=not-used;ValidAuthenticationTypes=Basic' \
             > local/.secrets/nuget-source-credentials
@@ -482,8 +482,8 @@ jobs:
           set -Eeuo pipefail
           # Keep the verifier's own docker compose calls in the same isolated
           # project context as the stack started below.
-          export COMPOSE_PROJECT_NAME=compilecare-fullstack-ci
-          compose=(docker compose --project-name compilecare-fullstack-ci --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml)
+          export COMPOSE_PROJECT_NAME=heapcare-fullstack-ci
+          compose=(docker compose --project-name heapcare-fullstack-ci --env-file local/.env -f local/docker-compose.yml -f local/docker-compose.observability.yml)
           "${compose[@]}" config --quiet
           "${compose[@]}" pull --ignore-buildable
           "${compose[@]}" build --pull api web
@@ -516,8 +516,8 @@ jobs:
       - name: Verify real Keycloak-issued identities and persisted multi-tenant workflows
         working-directory: HeapCare.Local
         env:
-          COMPILECARE_CI_ACCEPTANCE: "1"
-          COMPILECARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/compilecare-browser-user.json
+          HEAPCARE_CI_ACCEPTANCE: "1"
+          HEAPCARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/heapcare-browser-user.json
         run: python3 local/scripts/verify-authenticated-tenancy.py
 
       - name: Install Node.js for real browser acceptance
@@ -528,7 +528,7 @@ jobs:
       - name: Run real Keycloak Authorization Code + PKCE browser acceptance
         working-directory: HeapCare.Web
         env:
-          COMPILECARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/compilecare-browser-user.json
+          HEAPCARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/heapcare-browser-user.json
         run: |
           npm ci
           npx playwright install --with-deps chromium
@@ -538,17 +538,17 @@ jobs:
         if: failure()
         working-directory: HeapCare.Local
         run: |
-          docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
+          docker compose --project-name heapcare-fullstack-ci --env-file local/.env \
             -f local/docker-compose.yml -f local/docker-compose.observability.yml ps || true
-          docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
+          docker compose --project-name heapcare-fullstack-ci --env-file local/.env \
             -f local/docker-compose.yml -f local/docker-compose.observability.yml logs --no-color --tail=200 || true
 
       - name: Stop the isolated stack and remove CI-only secrets and volumes
         if: always()
         working-directory: HeapCare.Local
         run: |
-          docker compose --project-name compilecare-fullstack-ci --env-file local/.env \
+          docker compose --project-name heapcare-fullstack-ci --env-file local/.env \
             -f local/docker-compose.yml -f local/docker-compose.observability.yml down --volumes --remove-orphans || true
           rm -rf local/.secrets
           rm -f local/.env
-          rm -f "${RUNNER_TEMP}/compilecare-browser-user.json"
+          rm -f "${RUNNER_TEMP}/heapcare-browser-user.json"
