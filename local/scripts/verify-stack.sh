@@ -5,7 +5,7 @@ repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repository_root"
 
 if [[ ! -f local/.env ]]; then
-  echo "Missing local/.env. Run local/Start CompileCare.command first." >&2
+  echo "Missing local/.env. Run local/Start HeapCare.command first." >&2
   exit 1
 fi
 
