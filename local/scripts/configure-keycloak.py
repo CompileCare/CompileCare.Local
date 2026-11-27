@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Idempotently reconcile the local Keycloak realm's OIDC client scopes.
 
-This reconciles the CompileCare realm's profile/email/audience scopes, the
+This reconciles the HeapCare realm's profile/email/audience scopes, the
 Keycloak 26.2+ basic subject scope and compilecare-web default-scope assignments.
 It never deletes a realm or volume.
 """
@@ -72,7 +72,7 @@ def ensure_basic_subject_scope(
     if basic is None:
         basic_spec = {
             "name": "basic",
-            "description": "Basic OIDC claims required by CompileCare, including the access-token subject.",
+            "description": "Basic OIDC claims required by HeapCare, including the access-token subject.",
             "protocol": "openid-connect",
             "attributes": {
                 "include.in.token.scope": "true",
@@ -129,7 +129,7 @@ def ensure_basic_subject_scope(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("env_file", type=Path)
-    parser.add_argument("--realm-file", type=Path, default=Path(__file__).resolve().parents[1] / "keycloak" / "compilecare-realm.json")
+    parser.add_argument("--realm-file", type=Path, default=Path(__file__).resolve().parents[1] / "keycloak" / "heapcare-realm.json")
     parser.add_argument("--base-url", default="http://localhost:8082")
     args = parser.parse_args()
 
@@ -224,9 +224,9 @@ def main() -> int:
                 f"/admin/realms/{realm_name}/clients/{client_id}/default-client-scopes/{scope_ids[name]}",
             )
 
-    print("CompileCare local Keycloak client reconciled: redirect URIs and web origins")
-    print("CompileCare local Keycloak scopes reconciled: " + ", ".join(desired_names))
-    print("CompileCare access-token subject mapper verified in the basic scope.")
+    print("HeapCare local Keycloak client reconciled: redirect URIs and web origins")
+    print("HeapCare local Keycloak scopes reconciled: " + ", ".join(desired_names))
+    print("HeapCare access-token subject mapper verified in the basic scope.")
     return 0
 
 
