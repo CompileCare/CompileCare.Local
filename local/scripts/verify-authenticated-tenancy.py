@@ -803,6 +803,48 @@ def run() -> None:
     if in_progress_queue_entry.get("status") != "InProgress":
         raise AssertionError("Synthetic OPD walk-in did not reach the InProgress state.")
 
+    queue_date = in_progress_queue_entry.get("queueDateLocal")
+    if not queue_date:
+        raise AssertionError("Synthetic OPD queue entry did not return its hospital-local service date.")
+    department_queue_path = (
+        f"/api/v1/hospitals/{hospital_a}/queue"
+        f"?departmentId={department_a}&date={queue_date}&page=1&pageSize=50"
+    )
+
+    registrar_queue = require_status(
+        "PatientRegistrar can read the assigned hospital department queue",
+        api.call("GET", department_queue_path, tokens["patient-registrar"], tenant_a),
+        200,
+    )
+    registrar_queue_items = registrar_queue.get("items", [])
+    if not any(
+        item.get("id") == queue_entry_id and item.get("status") == "InProgress"
+        for item in registrar_queue_items
+    ):
+        raise AssertionError("PatientRegistrar did not receive the synthetic in-progress queue entry.")
+
+    clinical_queue = require_status(
+        "ClinicalUser can read the assigned hospital department queue",
+        api.call("GET", department_queue_path, tokens["clinical-user"], tenant_a),
+        200,
+    )
+    clinical_queue_items = clinical_queue.get("items", [])
+    if not any(
+        item.get("id") == queue_entry_id and item.get("status") == "InProgress"
+        for item in clinical_queue_items
+    ):
+        raise AssertionError("ClinicalUser did not receive the synthetic in-progress queue entry.")
+
+    expect_api_status(
+        "FacilityManager cannot read the OPD department queue",
+        api,
+        "GET",
+        department_queue_path,
+        tokens["facility-manager"],
+        tenant_a,
+        403,
+    )
+
     # Tenant data and permissions must follow the selected persisted membership.
     list_a = require_status(
         "List hospitals in tenant A",
