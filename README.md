@@ -4,10 +4,10 @@
 
 One-click local development environment for the HeapCare hospital platform.
 
-Clone the repository into a HeapCare-named local directory (the GitHub repository slug is still awaiting the administrative rename):
+Clone the repository into a HeapCare-named local directory:
 
 ```bash
-gh repo clone CompileCare/CompileCare.Local HeapCare.Local
+gh repo clone HeapCare/HeapCare.Local HeapCare.Local
 cd HeapCare.Local
 ```
 
@@ -21,14 +21,14 @@ This repository orchestrates the API, Web application, PostgreSQL and a preconfi
 ## Prerequisites
 
 1. Docker Desktop installed and running.
-2. Git and GitHub CLI installed and authenticated (`gh auth login`) with access to the CompileCare organization repositories.
-3. The GitHub CLI token must have `read:packages` access for the private GitHub Packages feed under the current CompileCare organization owner. The launcher requests this scope and stores the resulting credentials in the ignored `local/.secrets/` directory.
+2. Git and GitHub CLI installed and authenticated (`gh auth login`) with access to the HeapCare organization repositories.
+3. The GitHub CLI token must have `read:packages` access for the private GitHub Packages feed under the HeapCare organization owner. The launcher requests this scope and stores the resulting credentials in the ignored `local/.secrets/` directory.
 
 Do not use production credentials or real patient data in local development.
 
 ## First launch
 
-Both launchers clone the GitHub repositories currently named `CompileCare.Api` and `CompileCare.Web` into adjacent local folders named `HeapCare.Api` and `HeapCare.Web` when missing. Existing adjacent `CompileCare.Api` / `CompileCare.Web` checkouts are detected and reused without renaming or overwriting them. The macOS launcher additionally requires existing checkouts to be clean and on `main`, then fetches and fast-forward updates them only; it never force-resets, switches branches or discards local changes. On first run either launcher creates `local/.env` with random local-only Keycloak/PostgreSQL credentials and a one-time platform bootstrap secret. The macOS launcher obtains NuGet package credentials from the authenticated GitHub CLI token; the Windows launcher prompts for a GitHub username and a `read:packages` PAT and stores it in the ignored `local/.secrets/` directory. Secrets stay in ignored local files.
+Both launchers clone the GitHub repositories currently named `HeapCare.Api` and `HeapCare.Web` into adjacent local folders named `HeapCare.Api` and `HeapCare.Web` when missing. Existing adjacent `HeapCare.Api` / `HeapCare.Web` checkouts are detected and reused without renaming or overwriting them. The macOS launcher additionally requires existing checkouts to be clean and on `main`, then fetches and fast-forward updates them only; it never force-resets, switches branches or discards local changes. On first run either launcher creates `local/.env` with random local-only Keycloak/PostgreSQL credentials and a one-time platform bootstrap secret. The macOS launcher obtains NuGet package credentials from the authenticated GitHub CLI token; the Windows launcher prompts for a GitHub username and a `read:packages` PAT and stores it in the ignored `local/.secrets/` directory. Secrets stay in ignored local files.
 
 The local Keycloak realm is imported automatically on first startup:
 
@@ -125,11 +125,11 @@ If you override `OIDC_AUTHORITY` or the Web API URL for a different local topolo
 
 ## Cross-repository full-stack verification
 
-The pull-request workflow's Full nine-service Docker stack and API telemetry verification job checks the current main branches of CompileCare.Api, CompileCare.Web and CompileCare.Observability against this local Compose topology. It starts the nine-service stack with ephemeral credentials, validates infrastructure/observability, exercises real Keycloak-issued identities and persisted multi-tenant authorization, and runs the real OIDC Authorization Code + PKCE browser suite. See [the 2026-11-27 verification plan](qa/full-stack-verification-2026-11-27.md) for the scope and acceptance boundary.
+The pull-request workflow's Full nine-service Docker stack and API telemetry verification job checks the current main branches of HeapCare.Api, HeapCare.Web and HeapCare.Observability against this local Compose topology. It starts the nine-service stack with ephemeral credentials, validates infrastructure/observability, exercises real Keycloak-issued identities and persisted multi-tenant authorization, and runs the real OIDC Authorization Code + PKCE browser suite. See [the 2026-11-27 verification plan](qa/full-stack-verification-2026-11-27.md) for the scope and acceptance boundary.
 
 A passing hosted CI run is evidence for the exact repository SHAs checked out by that run. It is not a substitute for running the one-click launcher on the target developer Mac/Windows machines, manual accessibility/screen-reader review, provider-native production backup/PITR, or pilot sign-off.
 
 
 ## HeapCare identity migration
 
-HeapCare is the product-facing brand. The local Compose project name, PostgreSQL database/role, Keycloak realm (`compilecare`), OIDC client/audience IDs, connection-string key, persistent volume names and existing `COMPILECARE_*` launcher variables are intentionally retained as compatibility contracts in this phase. Existing local Docker volumes and Keycloak users must not be deleted or silently recreated. A future identity-provider migration must provision the HeapCare realm and clients, migrate users/roles, verify issuer/audience and callback behavior, and only then retire the legacy realm. The current GitHub organization and repository names also remain unchanged until the administrative rename is completed.
+HeapCare is the product-facing brand. The local Compose project name, PostgreSQL database/role, Keycloak realm (`compilecare`), OIDC client/audience IDs, connection-string key, persistent volume names and existing `COMPILECARE_*` launcher variables are intentionally retained as compatibility contracts in this phase. Existing local Docker volumes and Keycloak users must not be deleted or silently recreated. A future identity-provider migration must provision the HeapCare realm and clients, migrate users/roles, verify issuer/audience and callback behavior, and only then retire the legacy realm. The GitHub organization and all 11 repository slugs have been renamed to HeapCare.
