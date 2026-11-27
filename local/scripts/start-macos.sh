@@ -93,7 +93,7 @@ for key in KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD PLATFORM_BOOTSTRAP_SECRET; 
 done
 chmod 600 "$LOCAL/.env"
 
-# Use the authenticated GitHub CLI token for the private CompileCare NuGet feed.
+# Use the authenticated GitHub CLI token for the private HeapCare NuGet packages under the current GitHub owner.
 mkdir -p "$LOCAL/.secrets"
 CREDENTIALS="$LOCAL/.secrets/nuget-source-credentials"
 if [[ ! -s "$CREDENTIALS" ]]; then
