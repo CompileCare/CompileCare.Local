@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotently provision the CompileCare Logs Kibana data view for local use."""
+"""Idempotently provision the HeapCare Logs Kibana data view for local use."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def request(
     headers = {"Accept": "application/json"}
     if body is not None:
         headers["Content-Type"] = "application/json"
-        headers["kbn-xsrf"] = "compilecare-local-provisioner"
+        headers["kbn-xsrf"] = "heapcare-local-provisioner"
 
     req = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}",
@@ -72,14 +72,14 @@ def provision(base_url: str, timeout_seconds: int) -> None:
     )
     if existing:
         print(
-            "CompileCare Logs data view already exists "
+            "HeapCare Logs data view already exists "
             f"(id={existing.get('id')}, title={existing.get('title')})."
         )
         return
 
     payload = {
         "data_view": {
-            "name": "CompileCare Logs",
+            "name": "HeapCare Logs",
             "title": "compilecare-logs-*",
             "timeFieldName": "@timestamp",
             "allowNoIndex": True,
@@ -93,7 +93,7 @@ def provision(base_url: str, timeout_seconds: int) -> None:
     )
     if status not in (200, 201):
         raise RuntimeError(
-            f"Kibana could not create the CompileCare Logs data view "
+            f"Kibana could not create the HeapCare Logs data view "
             f"(HTTP {status}): {created}"
         )
 
@@ -102,7 +102,7 @@ def provision(base_url: str, timeout_seconds: int) -> None:
         raise RuntimeError(f"Kibana returned an unexpected data view: {created}")
 
     print(
-        "Provisioned CompileCare Logs data view "
+        "Provisioned HeapCare Logs data view "
         f"(id={data_view.get('id')}, title={data_view.get('title')}, "
         f"timeField={data_view.get('timeFieldName')})."
     )
