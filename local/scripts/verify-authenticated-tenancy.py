@@ -934,7 +934,38 @@ def run() -> None:
         },
     )
 
+    # Read and payment permissions remain distinct from clinical and
+    # facility read access, even within the same hospital tenant.
+    expect_api_status(
+        "ClinicalUser cannot read the cashier invoice",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+        tokens["clinical-user"],
+        tenant_a,
+        403,
+    )
+    expect_api_status(
+        "FacilityViewer cannot read the cashier invoice",
+        api,
+        "GET",
+        f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}",
+        tokens["facility-viewer"],
+        tenant_a,
+        403,
+    )
+
     payments_path = f"/api/v1/hospitals/{hospital_a}/billing/invoices/{invoice_id}/payments"
+    expect_api_status(
+        "ClinicalUser cannot record an OPD payment",
+        api,
+        "POST",
+        payments_path,
+        tokens["clinical-user"],
+        tenant_a,
+        403,
+        {"amount": 100.0, "method": "Cash", "reference": None},
+    )
     partial_payment = require_status(
         "PatientRegistrar can record a partial OPD cash payment",
         api.call(
