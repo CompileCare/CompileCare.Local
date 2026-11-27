@@ -3,8 +3,10 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LOCAL="$ROOT/local"
-API="$ROOT/../CompileCare.Api"
-WEB="$ROOT/../CompileCare.Web"
+API="$ROOT/../HeapCare.Api"
+if [[ ! -d "$API/.git" && -d "$ROOT/../CompileCare.Api/.git" ]]; then API="$ROOT/../CompileCare.Api"; fi
+WEB="$ROOT/../HeapCare.Web"
+if [[ ! -d "$WEB/.git" && -d "$ROOT/../CompileCare.Web/.git" ]]; then WEB="$ROOT/../CompileCare.Web"; fi
 BASE_COMPOSE="$LOCAL/docker-compose.yml"
 OBS_COMPOSE="$LOCAL/docker-compose.observability.yml"
 cd "$ROOT"
@@ -47,6 +49,7 @@ sync_repository() {
 
 sync_repository "CompileCare.Api" "$API"
 sync_repository "CompileCare.Web" "$WEB"
+export HEAPCARE_API_PATH="$API" HEAPCARE_WEB_PATH="$WEB"
 export COMPILECARE_API_PATH="$API" COMPILECARE_WEB_PATH="$WEB"
 
 # Keep a stable local environment and persistent database/identity volumes.
@@ -121,7 +124,7 @@ echo "Validating the complete Compose configuration..."
 echo "Pulling required base images and building the application images..."
 "${compose[@]}" pull --ignore-buildable || fail "Could not pull one or more runtime images."
 "${compose[@]}" build --pull api web || fail "API/Web Docker build failed."
-echo "Starting CompileCare, PostgreSQL, Keycloak and the complete observability stack..."
+echo "Starting HeapCare, PostgreSQL, Keycloak and the complete observability stack..."
 "${compose[@]}" up -d --remove-orphans || fail "Compose startup failed."
 
 echo "Reconciling local Keycloak OIDC client configuration..."
@@ -149,7 +152,7 @@ echo "Running infrastructure and observability smoke checks..."
 bash "$LOCAL/scripts/verify-stack.sh" || fail "One or more stack checks failed."
 
 echo
-echo "CompileCare is ready."
+echo "HeapCare is ready."
 echo "  Workspace:     http://localhost:8080"
 echo "  API/OpenAPI:   http://localhost:8081/openapi/v1.json"
 echo "  Keycloak:      http://keycloak.localhost:8082"
