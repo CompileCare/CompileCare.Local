@@ -258,7 +258,7 @@ jobs:
           )
           data_views = request("http://localhost:5601/api/data_views")
           assert any(
-              view.get("title") == "compilecare-logs-*"
+              view.get("title") == "heapcare-logs-*"
               for view in data_views.get("data_view", [])
           ), "HeapCare Logs Kibana data view was not provisioned"
           wait_for("http://localhost:9090/-/ready", "Prometheus")
@@ -323,7 +323,7 @@ jobs:
               "message": "Synthetic HeapCare observability pipeline smoke",
               "correlation_id": "ci-observability-smoke"
           }
-          request("http://localhost:9200/compilecare-logs-ci-smoke/_doc", "POST", log_payload)
+          request("http://localhost:9200/heapcare-logs-ci-smoke/_doc", "POST", log_payload)
 
           # Wait for the collector scrape and verify the sample metric is queryable.
           metric_query = urllib.parse.quote("heapcare_ci_smoke_total")
@@ -354,7 +354,7 @@ jobs:
           assert trace_result is not None, "Synthetic OTLP trace was not queryable in Jaeger's v3 trace API"
 
           # Verify Elasticsearch accepted and can return a synthetic log record.
-          log_result = request("http://localhost:9200/compilecare-logs-ci-smoke/_search?q=correlation_id:ci-observability-smoke")
+          log_result = request("http://localhost:9200/heapcare-logs-ci-smoke/_search?q=correlation_id:ci-observability-smoke")
           assert log_result.get("hits", {}).get("total", {}).get("value", 0) > 0, "Synthetic log record was not queryable in Elasticsearch"
 
           print("Verified OTLP metrics -> Prometheus, OTLP traces -> Jaeger, and synthetic logs -> Elasticsearch; Kibana and all backends are ready.")
