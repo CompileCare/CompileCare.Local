@@ -307,7 +307,7 @@ def user_access_token(username: str, password: str, expected_issuer: str) -> tup
         audiences = [audiences]
     if "compilecare-api" not in audiences:
         raise AssertionError(
-            f"Keycloak access token for {username} is missing the CompileCare API audience."
+            f"Keycloak access token for {username} is missing the HeapCare API audience."
         )
     subject = claims.get("sub")
     if not subject:
