@@ -270,12 +270,12 @@ jobs:
           metrics_payload = {
               "resourceMetrics": [{
                   "resource": {"attributes": [
-                      {"key": "service.name", "value": {"stringValue": "CompileCare.Api.CI"}}
+                      {"key": "service.name", "value": {"stringValue": "HeapCare.Api.CI"}}
                   ]},
                   "scopeMetrics": [{
                       "scope": {"name": "compilecare-ci-smoke"},
                       "metrics": [{
-                          "name": "compilecare_ci_smoke_total",
+                          "name": "heapcare_ci_smoke_total",
                           "sum": {
                               "dataPoints": [{
                                   "attributes": [{"key": "scenario", "value": {"stringValue": "docker-overlay"}}],
@@ -295,14 +295,14 @@ jobs:
           traces_payload = {
               "resourceSpans": [{
                   "resource": {"attributes": [
-                      {"key": "service.name", "value": {"stringValue": "CompileCare.Api.CI"}}
+                      {"key": "service.name", "value": {"stringValue": "HeapCare.Api.CI"}}
                   ]},
                   "scopeSpans": [{
                       "scope": {"name": "compilecare-ci-smoke"},
                       "spans": [{
                           "traceId": trace_id,
                           "spanId": span_id,
-                          "name": "compilecare-observability-ci-smoke",
+                          "name": "heapcare-observability-ci-smoke",
                           "kind": 1,
                           "startTimeUnixNano": start,
                           "endTimeUnixNano": end,
@@ -315,14 +315,14 @@ jobs:
 
           log_payload = {
               "@timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-              "service": "CompileCare.Api.CI",
-              "message": "Synthetic CompileCare observability pipeline smoke",
+              "service": "HeapCare.Api.CI",
+              "message": "Synthetic HeapCare observability pipeline smoke",
               "correlation_id": "ci-observability-smoke"
           }
           request("http://localhost:9200/compilecare-logs-ci-smoke/_doc", "POST", log_payload)
 
           # Wait for the collector scrape and verify the sample metric is queryable.
-          metric_query = urllib.parse.quote("compilecare_ci_smoke_total")
+          metric_query = urllib.parse.quote("heapcare_ci_smoke_total")
           metric_result = None
           for _ in range(30):
               try:
