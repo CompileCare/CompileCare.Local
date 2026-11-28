@@ -147,3 +147,32 @@ The fixture uses runner-local Keycloak identities and synthetic records only. It
 HeapCare.Web main now includes the appointment provider-session and available-slot polite status announcements merged in Web PR #88. The hosted Web pipeline passed the component tests, production build, Chromium E2E, real-OIDC suite discovery and Docker/CSP smoke.
 
 The full-stack Local acceptance must be replayed against Web main 554012ff0cafdab86381addd8c77985fe897dccd to verify the status announcements in the real Keycloak/API/PostgreSQL environment, alongside the already-passed PatientRegistrar patient search, appointment booking and check-in flow. The replay uses synthetic records and does not create clinical notes or use real patient data.
+### Real-OIDC appointment cancellation and lifecycle acceptance
+
+The cancellation acceptance fixture is prepared on the `phase4/real-oidc-appointment-cancellation` branch and is paired with HeapCare.Web PR #91 (merged as `254521e578bff33b4ba0d6198b9601f2f1ed0496`) and HeapCare.Api PR #125 (merged as `92f0765e42feca47508bd46518ac41521123318f`).
+
+The runner provisions only synthetic patients, provider slots and appointments. With persisted Keycloak tokens, the API acceptance:
+- Allows PatientRegistrar to cancel an ordinary booked appointment and verifies its persisted `Cancelled` state.
+- Denies FacilityManager and ClinicalUser cancellation attempts.
+- Verifies repeat cancellation, check-in after cancellation and reschedule after cancellation all return HTTP 409.
+- Creates a separate checked-in appointment, verifies cancellation returns HTTP 409, the appointment remains `Booked`, and its single queue entry remains readable.
+
+The paired browser journey uses a separate synthetic booking: PatientRegistrar opens Appointment management, loads the hospital-local date/department list, confirms cancellation and verifies the refreshed row displays `Cancelled`. The appointment list is checked to expose a patient reference only, not the synthetic family name.
+
+The full acceptance is complete only after the exact Local PR head passes tooling validation plus the nine-service Docker stack, persisted-role API checks, PostgreSQL logical restore smoke and real Keycloak Authorization Code + PKCE browser suite against the merged API/Web main SHAs. Ordinary Web CI only compiles/discovers the isolated real-OIDC suite.
+
+No clinical notes or treatment data are created. Synthetic runner credentials are temporary and removed during CI cleanup. No-show grace-period behavior remains out of scope until a pilot hospital approves the policy.
+
+### Authenticated semantic accessibility replay before cancellation acceptance
+
+Web #92 merged the semantic-accessibility locator declaration fix as `1e52c1c3eef5eaa6912cb8810184cf515a37c259`. It ensures the authenticated `main` landmark locator is declared before the six-role semantic DOM checks use it.
+
+The previous Local #39 run #46085930218 passed the nine-service stack, persisted-role cancellation API checks, PostgreSQL logical restore and the PatientRegistrar cancellation browser scenario. The overall real-OIDC job failed only because the six role accessibility cases hit `ReferenceError: Cannot access 'main' before initialization`; no API cancellation or browser cancellation assertion failed.
+
+This Local commit triggers a fresh integrated acceptance against Web main `1e52c1c3eef5eaa6912cb8810184cf515a37c259` and API main `92f0765e42feca47508bd46518ac41521123318f`. Local #39 is complete only when the exact-head nine-service job and tooling validation both pass, including the six role semantic checks and the PatientRegistrar cancellation UI journey.
+
+### Final semantic accessibility replay after Web #94 — 2026-11-28
+
+Web #94 merged as `009055abee9de8791c156c0e8e35dcdfafe865ec`. It corrects the real-Keycloak semantic accessibility assertion to split `aria-labelledby` and `aria-describedby` IDREF lists on actual whitespace. Together with Web #92, the authenticated suite now has both the main-locator initialization order and ARIA tokenization fixes.
+
+The next Local full-stack replay must use this exact Web main SHA and API main `92f0765e42feca47508bd46518ac41521123318f`. It is the final gate for the six authenticated semantic accessibility checks plus the PatientRegistrar cancellation flow in one real Keycloak, API and PostgreSQL environment. Do not mark PR #39 complete based only on hosted Web CI or the previous Local run.
