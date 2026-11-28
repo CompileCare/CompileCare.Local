@@ -108,3 +108,15 @@ This run is intended to include the latest merged mainline changes:
 - Observability: shared instrumentation packages from the current main branch.
 
 The CI job records exact repository SHAs before building. Append the run URL, result and SHA list after completion; do not infer the checked-out commits from PR merge times.
+
+
+### Integrated HeapCare verification target — 2026-11-28
+
+This checkpoint triggers the Local full-stack workflow against the current HeapCare main branches after the latest Phase 3 and Phase 5 changes.
+
+- API main includes PR #131 (`ffc3aa0087af6acd5c1a54e7a29cf7ec82808b09`), which migrates request-local authorization claim keys to heapcare:* and strips the old claim types, and PR #132 (`f2121a4062afb06b69d1be4c8b1d7640cca55fbc`), which adds a regression guard requiring explicit authorization metadata or an explicit anonymous exception on every /api/ route.
+- Web main includes PR #97 (`0e7d6ece2da7a921b5abb2a6386208f1f72a3a55`), which checks forced-colors focus on both the skip link and Sign in action, and PR #98 (`9dff5b506eef0de2955c6a27d70f4b30838686b0`), which checks forced-colors focus after real OIDC sign-in for each persisted role.
+- Expected authenticated accessibility cases: HospitalAdmin, FacilityManager, FacilityViewer, PatientRegistrar, ClinicalUser and PlatformOperator.
+- The Local workflow must record the exact checkout SHAs and run the full nine-service stack, PostgreSQL logical backup/isolated restore smoke, real Keycloak identity/tenant checks, and real OIDC browser suite. The run result and evidence must be appended below after it finishes.
+
+**Boundary:** This hosted Chromium forced-colors emulation is supplementary browser evidence. It does not replace native Windows High Contrast, manual keyboard-only workflows, screen-reader evaluation, real contrast measurements, zoom/reflow, or qualified WCAG 2.2 AA review. It is also not a production identity or recovery rehearsal.
