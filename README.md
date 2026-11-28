@@ -162,3 +162,11 @@ The paired browser journey uses a separate synthetic booking: PatientRegistrar o
 The full acceptance is complete only after the exact Local PR head passes tooling validation plus the nine-service Docker stack, persisted-role API checks, PostgreSQL logical restore smoke and real Keycloak Authorization Code + PKCE browser suite against the merged API/Web main SHAs. Ordinary Web CI only compiles/discovers the isolated real-OIDC suite.
 
 No clinical notes or treatment data are created. Synthetic runner credentials are temporary and removed during CI cleanup. No-show grace-period behavior remains out of scope until a pilot hospital approves the policy.
+
+### Authenticated semantic accessibility replay before cancellation acceptance
+
+Web #92 merged the semantic-accessibility locator declaration fix as `1e52c1c3eef5eaa6912cb8810184cf515a37c259`. It ensures the authenticated `main` landmark locator is declared before the six-role semantic DOM checks use it.
+
+The previous Local #39 run #46085930218 passed the nine-service stack, persisted-role cancellation API checks, PostgreSQL logical restore and the PatientRegistrar cancellation browser scenario. The overall real-OIDC job failed only because the six role accessibility cases hit `ReferenceError: Cannot access 'main' before initialization`; no API cancellation or browser cancellation assertion failed.
+
+This Local commit triggers a fresh integrated acceptance against Web main `1e52c1c3eef5eaa6912cb8810184cf515a37c259` and API main `92f0765e42feca47508bd46518ac41521123318f`. Local #39 is complete only when the exact-head nine-service job and tooling validation both pass, including the six role semantic checks and the PatientRegistrar cancellation UI journey.
