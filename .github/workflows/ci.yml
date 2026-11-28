@@ -418,11 +418,11 @@ jobs:
           feed="$GITHUB_WORKSPACE/HeapCare.Api/.ci-nuget"
           mkdir -p "$feed"
           dotnet pack src/HeapCare.Observability/HeapCare.Observability.csproj \
-            --configuration Release -p:Version=1.0.1 -o "$feed"
+            --configuration Release -p:Version=1.0.2 -o "$feed"
           dotnet pack src/HeapCare.Observability.AspNetCore/HeapCare.Observability.AspNetCore.csproj \
-            --configuration Release -p:Version=1.0.1 -o "$feed"
-          test -s "$feed/HeapCare.Observability.1.0.1.nupkg"
-          test -s "$feed/HeapCare.Observability.AspNetCore.1.0.1.nupkg"
+            --configuration Release -p:Version=1.0.2 -o "$feed"
+          test -s "$feed/HeapCare.Observability.1.0.2.nupkg"
+          test -s "$feed/HeapCare.Observability.AspNetCore.1.0.2.nupkg"
           cat > "$GITHUB_WORKSPACE/HeapCare.Api/NuGet.Config" <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
