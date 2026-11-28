@@ -1607,8 +1607,9 @@ def run() -> None:
     # and one already-checked-in appointment. The former is left Booked for
     # the real browser workspace; the latter proves a 409 cannot orphan its
     # durable queue entry.
-    cancellation_session_start = (
-        datetime.now(appointment_zone) + timedelta(minutes=15)
+    cancellation_session_start = max(
+        datetime.now(appointment_zone) + timedelta(minutes=15),
+        appointment_start + timedelta(minutes=15),
     ).replace(second=0, microsecond=0)
     cancellation_session_end = cancellation_session_start + timedelta(minutes=15)
     cancellation_session_payload = {
