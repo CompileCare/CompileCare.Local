@@ -13,7 +13,7 @@ import json
 import os
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import urllib.error
 import urllib.parse
@@ -1607,7 +1607,9 @@ def run() -> None:
     # and one already-checked-in appointment. The former is left Booked for
     # the real browser workspace; the latter proves a 409 cannot orphan its
     # durable queue entry.
-    cancellation_session_start = appointment_start + timedelta(minutes=15)
+    cancellation_session_start = (
+        datetime.now(appointment_zone) + timedelta(minutes=15)
+    ).replace(second=0, microsecond=0)
     cancellation_session_end = cancellation_session_start + timedelta(minutes=15)
     cancellation_session_payload = {
         "departmentId": department_a,
@@ -1710,6 +1712,19 @@ def run() -> None:
     if cancellation_ui_appointment.get("status") != "Booked":
         raise AssertionError(f"Browser cancellation appointment was not Booked: {cancellation_ui_appointment!r}")
 
+    check_in_slot_starts_at_utc = available_cancellation_slots[1].get("startsAtUtc")
+    if not check_in_slot_starts_at_utc:
+        raise AssertionError("Synthetic checked-in cancellation slot did not return its UTC start instant.")
+    check_in_slot_utc = datetime.fromisoformat(check_in_slot_starts_at_utc.replace("Z", "+00:00"))
+    now_utc = datetime.now(timezone.utc)
+    minutes_until_check_in_slot = (check_in_slot_utc - now_utc).total_seconds() / 60
+    if not -25 <= minutes_until_check_in_slot <= 55:
+        raise AssertionError(
+            "The synthetic check-in guard slot must be inside the API's -60/+30 minute window; "
+            f"minutes_until={minutes_until_check_in_slot:.1f}, "
+            f"slot_utc={check_in_slot_utc.isoformat()}, now_utc={now_utc.isoformat()}."
+        )
+
     checked_in_guard_appointment = require_status(
         "PatientRegistrar can book a synthetic appointment for cancellation-after-check-in acceptance",
         api.call(
@@ -1720,7 +1735,7 @@ def run() -> None:
             {
                 "availabilitySessionId": cancellation_session_id,
                 "patientId": appointment_patient_id,
-                "slotStartsAtUtc": available_cancellation_slots[1].get("startsAtUtc"),
+                "slotStartsAtUtc": check_in_slot_starts_at_utc,
                 "reason": "Synthetic cancellation after check-in acceptance",
             },
         ),
