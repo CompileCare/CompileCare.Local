@@ -685,8 +685,7 @@ def run() -> None:
             },
         ),
     )
-    ipd_role_tokens = role_tokens
-    for role, role_token in ipd_role_tokens.items():
+    for role, role_token in role_tokens.items():
         for method, route, payload in ipd_routes:
             expect_api_status(
                 f"{role} is denied IPD {method} {route.split('/ipd/', 1)[-1].split('/')[0]}",
@@ -1367,9 +1366,8 @@ def run() -> None:
     # Keep every synthetic check-in slot within the API's 60-minute
     # pre-check-in window, including the later cancellation guard appointment.
     appointment_start = (
-        datetime.now(appointment_zone) + timedelta(minutes=30)
+        datetime.now(appointment_zone) + timedelta(minutes=5)
     ).replace(second=0, microsecond=0)
-    appointment_start += timedelta(minutes=(-appointment_start.minute) % 10)
     appointment_end = appointment_start + timedelta(minutes=10)
     appointment_date = appointment_start.date().isoformat()
 
@@ -1652,9 +1650,10 @@ def run() -> None:
     # the real browser workspace; the latter proves a 409 cannot orphan its
     # durable queue entry.
     cancellation_session_start = max(
-        datetime.now(appointment_zone) + timedelta(minutes=15),
-        appointment_start + timedelta(minutes=15),
+        datetime.now(appointment_zone) + timedelta(minutes=5),
+        appointment_end,
     ).replace(second=0, microsecond=0)
+    cancellation_session_start += timedelta(minutes=(-cancellation_session_start.minute) % 5)
     cancellation_session_end = cancellation_session_start + timedelta(minutes=15)
     cancellation_session_payload = {
         "departmentId": department_a,
@@ -1763,9 +1762,9 @@ def run() -> None:
     check_in_slot_utc = datetime.fromisoformat(check_in_slot_starts_at_utc.replace("Z", "+00:00"))
     now_utc = datetime.now(timezone.utc)
     minutes_until_check_in_slot = (check_in_slot_utc - now_utc).total_seconds() / 60
-    if not -28 <= minutes_until_check_in_slot <= 58:
+    if not -50 <= minutes_until_check_in_slot <= 25:
         raise AssertionError(
-            "The synthetic check-in guard slot must be inside the API's -60/+30 minute window; "
+            "The synthetic check-in guard slot must remain inside the API's -60/+30 minute window with safety margin; "
             f"minutes_until={minutes_until_check_in_slot:.1f}, "
             f"slot_utc={check_in_slot_utc.isoformat()}, now_utc={now_utc.isoformat()}."
         )
@@ -1880,10 +1879,9 @@ def run() -> None:
         api, "GET", "/api/v1/hospitals", tokens["platform"], tenant_a, 403
     )
 
-    # Preserve the preceding negative case: first prove the global operator
-    # cannot select a tenant without membership. Then add an explicit persisted
-    # FacilityViewer membership for that same identity and verify it still
-    # receives no IPD permission through its global PlatformOperator status.
+    # Preserve the negative case above. Only after proving the global operator
+    # cannot select a tenant without membership do we add an explicit persisted
+    # FacilityViewer membership and test the dual-role IPD boundary.
     create_membership(
         api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["platform"], "FacilityViewer"
     )
@@ -2064,7 +2062,7 @@ def run() -> None:
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
     print("Verified FacilityViewer and ClinicalUser/FacilityManager patient-search denials and PatientRegistrar patient-search access.")
-    print("Verified all persisted tenant roles and PlatformOperator are denied every IPD route until role permissions are approved.")
+    print("Verified all persisted tenant roles and PlatformOperator remain denied every IPD route until role permissions are approved.")
     print("No real patient or billing data was created.")
 
 
