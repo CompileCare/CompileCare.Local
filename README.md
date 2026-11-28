@@ -159,7 +159,7 @@ The runner provisions only synthetic patients, provider slots and appointments. 
 
 The paired browser journey uses a separate synthetic booking: PatientRegistrar opens Appointment management, loads the hospital-local date/department list, confirms cancellation and verifies the refreshed row displays `Cancelled`. The appointment list is checked to expose a patient reference only, not the synthetic family name.
 
-The full acceptance is complete only after the exact Local PR head passes tooling validation plus the nine-service Docker stack, persisted-role API checks, PostgreSQL logical restore smoke and real Keycloak Authorization Code + PKCE browser suite against the merged API/Web main SHAs. Ordinary Web CI only compiles/discovers the isolated real-OIDC suite.
+Accepted in Local run #46086998413 on Local head `855b6f4a19c6bb5cd56e5dfabb539ef35aa0fb65`, with API main `92f0765e42feca47508bd46518ac41521123318f` and Web main `009055abee9de8791c156c0e8e35dcdfafe865ec`. Both tooling and full nine-service jobs passed, including persisted-role cancellation checks, PostgreSQL logical backup/restore and 11 real-Keycloak browser tests. Ordinary Web CI compiles/discovers the isolated suite; the Local full-stack job executes it against the live synthetic Keycloak/API/PostgreSQL stack.
 
 No clinical notes or treatment data are created. Synthetic runner credentials are temporary and removed during CI cleanup. No-show grace-period behavior remains out of scope until a pilot hospital approves the policy.
 
@@ -171,8 +171,15 @@ The previous Local #39 run #46085930218 passed the nine-service stack, persisted
 
 This Local commit triggers a fresh integrated acceptance against Web main `1e52c1c3eef5eaa6912cb8810184cf515a37c259` and API main `92f0765e42feca47508bd46518ac41521123318f`. Local #39 is complete only when the exact-head nine-service job and tooling validation both pass, including the six role semantic checks and the PatientRegistrar cancellation UI journey.
 
-### Final semantic accessibility replay after Web #94 — 2026-11-28
+### Final real-OIDC acceptance — passed 2026-11-28
 
-Web #94 merged as `009055abee9de8791c156c0e8e35dcdfafe865ec`. It corrects the real-Keycloak semantic accessibility assertion to split `aria-labelledby` and `aria-describedby` IDREF lists on actual whitespace. Together with Web #92, the authenticated suite now has both the main-locator initialization order and ARIA tokenization fixes.
+Web #92 merged the authenticated main-locator declaration fix as `1e52c1c3eef5eaa6912cb8810184cf515a37c259`; Web #94 merged the ARIA IDREF whitespace-tokenization fix as `009055abee9de8791c156c0e8e35dcdfafe865ec`.
 
-The next Local full-stack replay must use this exact Web main SHA and API main `92f0765e42feca47508bd46518ac41521123318f`. It is the final gate for the six authenticated semantic accessibility checks plus the PatientRegistrar cancellation flow in one real Keycloak, API and PostgreSQL environment. Do not mark PR #39 complete based only on hosted Web CI or the previous Local run.
+HeapCare.Local PR #39 is merged as `28a2123c5f0dc9b25a8f1ead0c08cb59bb4d51f9`. Exact full-stack run [#46086998413](https://github.com/HeapCare/HeapCare.Local/actions/runs/46086998413) passed both jobs:
+- Local tooling checks: shell/PowerShell/Python validation, Keycloak realm smoke, OpenTelemetry config, Compose config and Docker observability pipeline smoke.
+- Nine-service stack, readiness and telemetry checks.
+- Real Keycloak persisted-role API workflows, including cancellation, cancellation-after-check-in rejection, and FacilityManager/ClinicalUser denials.
+- PostgreSQL logical backup and isolated restore with application-table row-count comparison.
+- **11 real-Keycloak Authorization Code + PKCE browser tests passed**, including the six-role semantic accessibility checks, PatientRegistrar registration/appointment booking/check-in, OPD billing/receipt, clinical note signature/amendment workflow, and appointment-management cancellation.
+
+All test users and domain records were synthetic. The CI-only Keycloak credentials, secrets, containers, and volumes were removed during cleanup. This is an integrated acceptance result, not a production clinical approval or WCAG conformance claim.

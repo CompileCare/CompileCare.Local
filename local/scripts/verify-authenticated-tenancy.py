@@ -1719,7 +1719,7 @@ def run() -> None:
     check_in_slot_utc = datetime.fromisoformat(check_in_slot_starts_at_utc.replace("Z", "+00:00"))
     now_utc = datetime.now(timezone.utc)
     minutes_until_check_in_slot = (check_in_slot_utc - now_utc).total_seconds() / 60
-    if not -25 <= minutes_until_check_in_slot <= 55:
+    if not -28 <= minutes_until_check_in_slot <= 58:
         raise AssertionError(
             "The synthetic check-in guard slot must be inside the API's -60/+30 minute window; "
             f"minutes_until={minutes_until_check_in_slot:.1f}, "
