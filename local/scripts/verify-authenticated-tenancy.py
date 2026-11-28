@@ -657,10 +657,10 @@ def run() -> None:
     }
 
     # IPD permissions are intentionally not granted to any current tenant role
-    # until the hospital-approved six-role matrix is accepted. Verify every
-    # persisted tenant role with real Keycloak-issued tokens. PlatformOperator
-    # without tenant membership is checked separately below before adding an
-    # explicit tenant membership for the dual-role authorization regression.
+    # until the hospital-approved six-role matrix is accepted. Verify all five
+    # persisted tenant roles and the platform-only operator identity using real
+    # Keycloak-issued tokens. The API integration suite separately covers the
+    # dual PlatformOperator + tenant-membership scenario.
     zero_id = "00000000-0000-0000-0000-000000000000"
     ipd_routes = (
         ("GET", f"/api/v1/hospitals/{hospital_a}/ipd/admissions?page=1&pageSize=25", None),
@@ -685,7 +685,8 @@ def run() -> None:
             },
         ),
     )
-    for role, role_token in role_tokens.items():
+    ipd_role_tokens = {**role_tokens, "PlatformOperator": tokens["platform"]}
+    for role, role_token in ipd_role_tokens.items():
         for method, route, payload in ipd_routes:
             expect_api_status(
                 f"{role} is denied IPD {method} {route.split('/ipd/', 1)[-1].split('/')[0]}",
@@ -1879,23 +1880,6 @@ def run() -> None:
         api, "GET", "/api/v1/hospitals", tokens["platform"], tenant_a, 403
     )
 
-    # Preserve the negative case above. Only after proving the global operator
-    # cannot select a tenant without membership do we add an explicit persisted
-    # FacilityViewer membership and test the dual-role IPD boundary.
-    create_membership(
-        api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["platform"], "FacilityViewer"
-    )
-    for method, route, payload in ipd_routes:
-        expect_api_status(
-            f"PlatformOperator with tenant membership is denied IPD {method} {route.split('/ipd/', 1)[-1].split('/')[0]}",
-            api,
-            method,
-            route,
-            tokens["platform"],
-            tenant_a,
-            403,
-            payload,
-        )
     expect_api_status(
         "Authenticated request without tenant selection is rejected",
         api, "GET", "/api/v1/hospitals", tokens["shared"], None, 400
