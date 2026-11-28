@@ -1320,8 +1320,10 @@ def run() -> None:
     # endpoints. Leave the slot unbooked so the PatientRegistrar browser journey
     # performs the actual booking and appointment check-in.
     appointment_zone = ZoneInfo("Asia/Kolkata")
+    # Keep every synthetic check-in slot within the API's 60-minute
+    # pre-check-in window, including the later cancellation guard appointment.
     appointment_start = (
-        datetime.now(appointment_zone) + timedelta(minutes=45)
+        datetime.now(appointment_zone) + timedelta(minutes=30)
     ).replace(second=0, microsecond=0)
     appointment_start += timedelta(minutes=(-appointment_start.minute) % 10)
     appointment_end = appointment_start + timedelta(minutes=10)
