@@ -467,7 +467,7 @@ def run() -> None:
     password = secrets.token_urlsafe(24)
     usernames = {
         name: f"heapcare-ci-{name}-{suffix}"
-        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-viewer", "facility-manager", "patient-registrar", "clinical-user")
+        for name in ("platform", "tenant-a-admin", "tenant-b-admin", "shared", "facility-viewer", "facility-manager", "patient-registrar", "clinical-user", "custom-role-user", "delegated-admin")
     }
     subjects: dict[str, str] = {}
     tokens: dict[str, str] = {}
@@ -530,6 +530,283 @@ def run() -> None:
             api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["clinical-user"], "ClinicalUser"
         ),
     }
+
+    # Exercise persisted custom-role administration using real Keycloak identities
+    # and the isolated CI tenant. These are synthetic-only API acceptance checks.
+    roles_path = "/api/v1/tenant/roles"
+    assignable_permissions = require_status(
+        "List permissions delegable by tenant administrator",
+        api.call("GET", f"{roles_path}/permissions", tokens["tenant-a-admin"], tenant_a),
+        200,
+    )
+    assignable_codes = {
+        item.get("code") for item in assignable_permissions if isinstance(item, dict)
+    }
+    protected_and_gated = {
+        "membership.role.assign.system",
+        "inpatient.read",
+        "inpatient.admit",
+        "inpatient.bed.assign",
+        "inpatient.bed.transfer",
+        "inpatient.admission.cancel",
+        "inpatient.admission.discharge",
+    }
+    if assignable_codes.intersection(protected_and_gated):
+        raise AssertionError(
+            "The assignable permission catalogue exposed a protected or hospital-gated permission."
+        )
+
+    baseline_roles = require_status(
+        "List persisted tenant roles",
+        api.call("GET", roles_path, tokens["tenant-a-admin"], tenant_a),
+        200,
+    )
+    baseline_codes = {item.get("code") for item in baseline_roles if isinstance(item, dict)}
+    expected_system_roles = {
+        "HospitalAdmin",
+        "FacilityManager",
+        "FacilityViewer",
+        "PatientRegistrar",
+        "ClinicalUser",
+    }
+    if not expected_system_roles.issubset(baseline_codes):
+        raise AssertionError(
+            f"The persisted tenant role catalogue is missing system roles: {expected_system_roles - baseline_codes!r}"
+        )
+
+    custom_role = require_status(
+        "Create least-privilege custom facility-read role",
+        api.call(
+            "POST",
+            roles_path,
+            tokens["tenant-a-admin"],
+            tenant_a,
+            {
+                "name": "CI Facility Read Custom",
+                "description": "Real Keycloak custom role acceptance",
+                "permissionCodes": ["facility.read"],
+                "reason": "Verify persisted custom-role creation",
+            },
+        ),
+        201,
+    )
+    custom_role_id = custom_role.get("id")
+    custom_role_code = custom_role.get("code")
+    if (
+        not custom_role_id
+        or not custom_role_code
+        or custom_role.get("isSystem") is not False
+        or custom_role.get("isActive") is not True
+        or set(custom_role.get("permissionCodes", [])) != {"facility.read"}
+    ):
+        raise AssertionError(f"Custom role creation returned an unexpected representation: {custom_role!r}")
+
+    custom_membership_id = create_membership(
+        api,
+        tokens["tenant-a-admin"],
+        tenant_a,
+        issuer,
+        subjects["custom-role-user"],
+        custom_role_code,
+    )
+    custom_contexts = require_status(
+        "Read the custom-role user's persisted tenant context",
+        api.call(
+            "GET",
+            "/api/v1/me/tenant-contexts?page=1&pageSize=50",
+            tokens["custom-role-user"],
+        ),
+        200,
+    )
+    custom_items = custom_contexts.get("items", [])
+    if len(custom_items) != 1:
+        raise AssertionError(f"Expected one custom-role tenant membership: {custom_contexts!r}")
+    custom_context = custom_items[0]
+    if (
+        custom_context.get("role") != custom_role_code
+        or set(custom_context.get("permissions", [])) != {"facility.read"}
+    ):
+        raise AssertionError(
+            f"The API did not derive the custom role's exact persisted permissions: {custom_context!r}"
+        )
+    expect_api_status(
+        "Custom FacilityReader can read facilities",
+        api,
+        "GET",
+        "/api/v1/hospitals",
+        tokens["custom-role-user"],
+        tenant_a,
+        200,
+    )
+    expect_api_status(
+        "Custom FacilityReader cannot create facilities",
+        api,
+        "POST",
+        "/api/v1/hospitals",
+        tokens["custom-role-user"],
+        tenant_a,
+        403,
+        {"name": "Forbidden Custom Facility", "code": f"FORBIDDEN-{suffix.upper()}"},
+    )
+
+    updated_role = require_status(
+        "Change custom role grants from facility.read to patient.identity.read",
+        api.call(
+            "PUT",
+            f"{roles_path}/{custom_role_id}",
+            tokens["tenant-a-admin"],
+            tenant_a,
+            {
+                "name": "CI Identity Reader Custom",
+                "description": "Updated real Keycloak custom role acceptance",
+                "permissionCodes": ["patient.identity.read"],
+                "reason": "Verify persisted permission changes",
+            },
+        ),
+        200,
+    )
+    if set(updated_role.get("permissionCodes", [])) != {"patient.identity.read"}:
+        raise AssertionError(f"Custom role update did not persist the requested grants: {updated_role!r}")
+    updated_contexts = require_status(
+        "Verify custom permission changes take effect on the next request",
+        api.call(
+            "GET",
+            "/api/v1/me/tenant-contexts?page=1&pageSize=50",
+            tokens["custom-role-user"],
+        ),
+        200,
+    )
+    updated_context = updated_contexts.get("items", [None])[0]
+    if (
+        updated_context is None
+        or updated_context.get("role") != custom_role_code
+        or set(updated_context.get("permissions", [])) != {"patient.identity.read"}
+    ):
+        raise AssertionError(
+            f"The next-request permission resolver returned stale custom-role grants: {updated_contexts!r}"
+        )
+    expect_api_status(
+        "Updated custom role no longer grants facility reads",
+        api,
+        "GET",
+        "/api/v1/hospitals",
+        tokens["custom-role-user"],
+        tenant_a,
+        403,
+    )
+
+    require_status(
+        "Deactivate custom-role membership before role lifecycle test",
+        api.call(
+            "POST",
+            f"/api/v1/tenant/memberships/{custom_membership_id}/deactivate",
+            tokens["tenant-a-admin"],
+            tenant_a,
+        ),
+        200,
+    )
+    require_status(
+        "Deactivate unassigned custom role",
+        api.call(
+            "POST",
+            f"{roles_path}/{custom_role_id}/deactivate",
+            tokens["tenant-a-admin"],
+            tenant_a,
+            {"reason": "Verify custom-role deactivation"},
+        ),
+        200,
+    )
+    expect_api_status(
+        "An inactive custom role cannot reactivate its membership",
+        api,
+        "POST",
+        f"/api/v1/tenant/memberships/{custom_membership_id}/reactivate",
+        tokens["tenant-a-admin"],
+        tenant_a,
+        400,
+    )
+    require_status(
+        "Reactivate the custom role before its membership",
+        api.call(
+            "POST",
+            f"{roles_path}/{custom_role_id}/reactivate",
+            tokens["tenant-a-admin"],
+            tenant_a,
+            {"reason": "Restore custom role for membership test"},
+        ),
+        200,
+    )
+    require_status(
+        "Reactivate custom-role membership after role restoration",
+        api.call(
+            "POST",
+            f"/api/v1/tenant/memberships/{custom_membership_id}/reactivate",
+            tokens["tenant-a-admin"],
+            tenant_a,
+        ),
+        200,
+    )
+
+    # A custom membership administrator may manage roles, but may only delegate
+    # permissions that are present in their own current persisted grant set.
+    delegator_role = require_status(
+        "Create a restricted delegated-role administrator",
+        api.call(
+            "POST",
+            roles_path,
+            tokens["tenant-a-admin"],
+            tenant_a,
+            {
+                "name": "CI Delegated Role Admin",
+                "description": "Restricted role administration acceptance",
+                "permissionCodes": ["membership.manage", "facility.read"],
+                "reason": "Verify delegated administrator boundaries",
+            },
+        ),
+        201,
+    )
+    delegator_membership_id = create_membership(
+        api,
+        tokens["tenant-a-admin"],
+        tenant_a,
+        issuer,
+        subjects["delegated-admin"],
+        delegator_role["code"],
+    )
+    excessive_delegation = api.call(
+        "POST",
+        roles_path,
+        tokens["delegated-admin"],
+        tenant_a,
+        {
+            "name": "CI Excessive Permission Role",
+            "description": "Must not be creatable by a restricted delegator",
+            "permissionCodes": ["facility.delete"],
+            "reason": "Verify delegation subset enforcement",
+        },
+    )
+    require_status(
+        "Custom membership administrator cannot delegate permissions they do not hold",
+        (excessive_delegation[0], excessive_delegation[1], excessive_delegation[2]),
+        403,
+    )
+    gated_delegation = api.call(
+        "POST",
+        roles_path,
+        tokens["delegated-admin"],
+        tenant_a,
+        {
+            "name": "CI Gated IPD Role",
+            "description": "Must not expose gated IPD capabilities",
+            "permissionCodes": ["inpatient.admit"],
+            "reason": "Verify IPD permissions remain non-assignable",
+        },
+    )
+    require_status(
+        "Custom administrator cannot delegate non-assignable IPD permissions",
+        (gated_delegation[0], gated_delegation[1], gated_delegation[2]),
+        403,
+    )
 
     hospital_a = create_hospital(
         api, tokens["shared"], tenant_a, "CI Hospital A", f"A-{suffix.upper()}"
@@ -2046,6 +2323,7 @@ def run() -> None:
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
     print("Verified FacilityViewer and ClinicalUser/FacilityManager patient-search denials and PatientRegistrar patient-search access.")
+    print("Verified persisted custom-role creation, exact grants, immediate permission changes, safe deactivation/reactivation and delegated-grant denial.")
     print("Verified all persisted tenant roles and PlatformOperator remain denied every IPD route until role permissions are approved.")
     print("No real patient or billing data was created.")
 
