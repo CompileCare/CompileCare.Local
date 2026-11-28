@@ -1323,9 +1323,8 @@ def run() -> None:
     # Keep every synthetic check-in slot within the API's 60-minute
     # pre-check-in window, including the later cancellation guard appointment.
     appointment_start = (
-        datetime.now(appointment_zone) - timedelta(minutes=5)
+        datetime.now(appointment_zone) + timedelta(minutes=5)
     ).replace(second=0, microsecond=0)
-    appointment_start += timedelta(minutes=(-appointment_start.minute) % 10)
     appointment_end = appointment_start + timedelta(minutes=10)
     appointment_date = appointment_start.date().isoformat()
 
