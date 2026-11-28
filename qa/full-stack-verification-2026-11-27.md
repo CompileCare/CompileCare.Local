@@ -120,3 +120,15 @@ This checkpoint triggers the Local full-stack workflow against the current HeapC
 - The Local workflow must record the exact checkout SHAs and run the full nine-service stack, PostgreSQL logical backup/isolated restore smoke, real Keycloak identity/tenant checks, and real OIDC browser suite. The run result and evidence must be appended below after it finishes.
 
 **Boundary:** This hosted Chromium forced-colors emulation is supplementary browser evidence. It does not replace native Windows High Contrast, manual keyboard-only workflows, screen-reader evaluation, real contrast measurements, zoom/reflow, or qualified WCAG 2.2 AA review. It is also not a production identity or recovery rehearsal.
+
+
+### Authenticated action keyboard-focus replay target — 2026-11-28
+
+This follow-up runs the real Keycloak Authorization Code + PKCE browser suite after Web PR #99 was merged. The six authenticated role accessibility-baseline cases now continue keyboard navigation from the focused main landmark to the Sign out action and assert `:focus-visible` plus a visible outline in forced-colors mode.
+
+- Web main includes PR #99, merge `62b3687f1ef77d84986113810740904112064589`.
+- API main remains PR #132, merge `f2121a4062afb06b69d1be4c8b1d7640cca55fbc`.
+- Observability main remains `84bc2ec84de9a1378ac376491d6f6e38dfdcabb6`.
+- The run must capture exact cross-repository checkout SHAs and execute the full nine-service stack, real Keycloak tenant/membership workflows, PostgreSQL logical backup/isolated restore and all 11+ real OIDC browser tests.
+
+This replay is automated forced-colors/browser evidence only. Native Windows High Contrast, full keyboard-only workflow completion, real screen-reader review, contrast, zoom/reflow and qualified WCAG 2.2 AA acceptance remain manual and are not waived by CI.
