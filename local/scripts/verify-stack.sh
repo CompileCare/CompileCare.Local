@@ -27,6 +27,36 @@ echo "Checking PostgreSQL readiness..."
 "${compose[@]}" exec -T postgres pg_isready -U compilecare -d compilecare >/dev/null
 echo "  ✓ PostgreSQL accepts local readiness probes"
 
+echo "Checking IPD admission and bed-placement schema migrations..."
+ipd_schema_sql=$(cat <<'SQL'
+SELECT
+    (to_regclass('public.inpatient_admissions') IS NOT NULL)::int +
+    (to_regclass('public.inpatient_bed_placements') IS NOT NULL)::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CK_inpatient_admissions_status' AND conrelid = 'public.inpatient_admissions'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CK_inpatient_admissions_lifecycle' AND conrelid = 'public.inpatient_admissions'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CK_inpatient_bed_placements_time_range' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AK_inpatient_admissions_TenantId_HospitalId_Id' AND conrelid = 'public.inpatient_admissions'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_admissions_hospital_patient_registrations' AND conrelid = 'public.inpatient_admissions'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_bed_placements_admissions' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_bed_placements_hospitals' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_bed_placements_departments' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_bed_placements_wards' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_bed_placements_rooms' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_inpatient_bed_placements_beds' AND conrelid = 'public.inpatient_bed_placements'::regclass))::int +
+    (EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'IX_inpatient_admissions_TenantId_HospitalId_PatientId' AND i.indisunique))::int +
+    (EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'IX_inpatient_bed_placements_TenantId_AdmissionId' AND i.indisunique))::int +
+    (EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'IX_inpatient_bed_placements_TenantId_BedId' AND i.indisunique))::int;
+SQL
+)
+ipd_schema_object_count=$("${compose[@]}" exec -T postgres sh -ec \
+  'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "$1"' \
+  sh "$ipd_schema_sql")
+if [[ "$ipd_schema_object_count" != "16" ]]; then
+  echo "IPD schema verification found ${ipd_schema_object_count:-no result}/16 required tables, constraints and unique indexes." >&2
+  exit 1
+fi
+echo "  ✓ IPD tables, hospital-registration/facility constraints and active occupancy indexes are present"
+
 echo "Checking Web and API..."
 curl_local http://localhost:8080/ >/dev/null
 web_headers=$(curl --fail --silent --show-error --head http://localhost:8080/)
