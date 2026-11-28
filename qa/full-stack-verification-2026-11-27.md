@@ -132,3 +132,26 @@ This follow-up runs the real Keycloak Authorization Code + PKCE browser suite af
 - The run must capture exact cross-repository checkout SHAs and execute the full nine-service stack, real Keycloak tenant/membership workflows, PostgreSQL logical backup/isolated restore and all 11+ real OIDC browser tests.
 
 This replay is automated forced-colors/browser evidence only. Native Windows High Contrast, full keyboard-only workflow completion, real screen-reader review, contrast, zoom/reflow and qualified WCAG 2.2 AA acceptance remain manual and are not waived by CI.
+
+### IPD API hardening current-main re-verification — 2026-11-28
+
+This follow-up reruns the complete nine-service full-stack job against the merged IPD hardening API mainline. The Local acceptance script already contains the five current IPD routes (admission list, admission detail, admission creation, bed assignment and bed transfer) and tests all five persisted tenant roles plus a separate platform-only PlatformOperator identity for denied access. The purpose of this checkpoint is to replay that existing real-Keycloak negative authorization matrix against the latest API main after the transfer, occupancy and audit hardening merges.
+
+**Expected checkout heads at trigger time:**
+- HeapCare.Local: `19929c3ec999f3f38d5dd9aa6661916247e74a49` (Local PR #46 merge).
+- HeapCare.Api: `39c40bb7ccdb899b23684b18595293c331a79078` (API PR #146 merge; includes API PRs #143–#146).
+- HeapCare.Web: `afb61cfbd77aab837ed65dcb30043519c27a5684`.
+- HeapCare.Observability: `84bc2ec84de9a1378ac376491d6f6e38dfdcabb6`.
+
+The Local PR workflow checks out the current `main` branches of API, Web and Observability and records their actual SHAs before building. Treat the values above as the planned trigger heads only; the run's recorded SHAs are the source of truth.
+
+**Required evidence:**
+- Full nine-service Docker stack, API readiness, IPD schema/migration assertions, observability smoke and cleanup.
+- Real Keycloak-issued tokens and persisted membership for HospitalAdmin, FacilityManager, FacilityViewer, PatientRegistrar and ClinicalUser; separate platform-only PlatformOperator.
+- HTTP 403 for all five current IPD routes for each of those identities, with no role grants added.
+- PostgreSQL logical backup/isolated restore smoke with matching row counts.
+- Real OIDC Authorization Code + PKCE Chromium suite and authenticated six-role Firefox/WebKit accessibility baseline.
+
+**Acceptance boundary:** this rerun verifies the current merged API integration and IPD negative authorization in an isolated synthetic stack. It does not grant IPD permissions, prove a positive admission-to-discharge workflow, verify the user's developer Mac/Windows installation, or replace manual accessibility, clinical governance, privacy/security or production recovery sign-off.
+
+**Run evidence:** pending the full-stack CI result for this PR. Append the run URL, exact checked-out SHAs and outcomes here after completion; do not infer success from the PR being merged.
