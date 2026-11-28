@@ -534,7 +534,7 @@ def run() -> None:
     # Give the global operator a real tenant membership as well, matching the
     # API-level regression fixture. This proves that even an operator who is
     # also a persisted tenant member receives no implicit IPD permission.
-    platform_viewer_membership = create_membership(
+    create_membership(
         api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["platform"], "FacilityViewer"
     )
 
