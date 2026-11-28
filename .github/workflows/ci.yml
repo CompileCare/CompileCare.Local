@@ -650,14 +650,28 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run real Keycloak Authorization Code + PKCE browser acceptance
+      - name: Run real Keycloak Authorization Code + PKCE browser acceptance on Chromium
+        working-directory: HeapCare.Web
+        env:
+          HEAPCARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/heapcare-browser-user.json
+          PLAYWRIGHT_BROWSER: chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox webkit
+          npm run test:e2e:real-oidc
+
+      - name: Run authenticated six-role accessibility baseline on Firefox and WebKit
         working-directory: HeapCare.Web
         env:
           HEAPCARE_BROWSER_TEST_USER_FILE: ${{ runner.temp }}/heapcare-browser-user.json
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          npm run test:e2e:real-oidc
+          set -Eeuo pipefail
+          for browser in firefox webkit; do
+            echo "Running real-Keycloak authenticated accessibility baseline on ${browser}..."
+            PLAYWRIGHT_BROWSER="${browser}" npx playwright test \
+              --config=playwright.real-oidc.config.ts \
+              e2e-real/real-keycloak-authenticated-accessibility.spec.ts
+          done
 
       - name: Capture full-stack diagnostics on failure
         if: failure()

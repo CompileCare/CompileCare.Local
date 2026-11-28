@@ -1323,9 +1323,8 @@ def run() -> None:
     # Keep every synthetic check-in slot within the API's 60-minute
     # pre-check-in window, including the later cancellation guard appointment.
     appointment_start = (
-        datetime.now(appointment_zone) + timedelta(minutes=30)
+        datetime.now(appointment_zone) + timedelta(minutes=5)
     ).replace(second=0, microsecond=0)
-    appointment_start += timedelta(minutes=(-appointment_start.minute) % 10)
     appointment_end = appointment_start + timedelta(minutes=10)
     appointment_date = appointment_start.date().isoformat()
 
@@ -1608,9 +1607,10 @@ def run() -> None:
     # the real browser workspace; the latter proves a 409 cannot orphan its
     # durable queue entry.
     cancellation_session_start = max(
-        datetime.now(appointment_zone) + timedelta(minutes=15),
-        appointment_start + timedelta(minutes=15),
+        datetime.now(appointment_zone) + timedelta(minutes=5),
+        appointment_end,
     ).replace(second=0, microsecond=0)
+    cancellation_session_start += timedelta(minutes=(-cancellation_session_start.minute) % 5)
     cancellation_session_end = cancellation_session_start + timedelta(minutes=15)
     cancellation_session_payload = {
         "departmentId": department_a,
@@ -1719,9 +1719,9 @@ def run() -> None:
     check_in_slot_utc = datetime.fromisoformat(check_in_slot_starts_at_utc.replace("Z", "+00:00"))
     now_utc = datetime.now(timezone.utc)
     minutes_until_check_in_slot = (check_in_slot_utc - now_utc).total_seconds() / 60
-    if not -28 <= minutes_until_check_in_slot <= 58:
+    if not -50 <= minutes_until_check_in_slot <= 25:
         raise AssertionError(
-            "The synthetic check-in guard slot must be inside the API's -60/+30 minute window; "
+            "The synthetic check-in guard slot must remain inside the API's -60/+30 minute window with safety margin; "
             f"minutes_until={minutes_until_check_in_slot:.1f}, "
             f"slot_utc={check_in_slot_utc.isoformat()}, now_utc={now_utc.isoformat()}."
         )
