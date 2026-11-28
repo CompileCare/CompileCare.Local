@@ -27,6 +27,61 @@ echo "Checking PostgreSQL readiness..."
 "${compose[@]}" exec -T postgres pg_isready -U compilecare -d compilecare >/dev/null
 echo "  ✓ PostgreSQL accepts local readiness probes"
 
+echo "Checking IPD admission and bed-placement schema migrations..."
+"${compose[@]}" exec -T postgres sh -ec \
+  'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+DO $
+DECLARE
+    required_constraint text;
+    required_index text;
+BEGIN
+    IF to_regclass('public.inpatient_admissions') IS NULL THEN
+        RAISE EXCEPTION 'Missing migrated table: inpatient_admissions';
+    END IF;
+    IF to_regclass('public.inpatient_bed_placements') IS NULL THEN
+        RAISE EXCEPTION 'Missing migrated table: inpatient_bed_placements';
+    END IF;
+
+    FOREACH required_constraint IN ARRAY ARRAY[
+        'CK_inpatient_admissions_status',
+        'CK_inpatient_admissions_lifecycle',
+        'CK_inpatient_bed_placements_time_range',
+        'AK_inpatient_admissions_TenantId_HospitalId_Id',
+        'FK_inpatient_admissions_hospital_patient_registrations',
+        'FK_inpatient_bed_placements_admissions',
+        'FK_inpatient_bed_placements_hospitals',
+        'FK_inpatient_bed_placements_departments',
+        'FK_inpatient_bed_placements_wards',
+        'FK_inpatient_bed_placements_rooms',
+        'FK_inpatient_bed_placements_beds'
+    ]
+    LOOP
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = required_constraint) THEN
+            RAISE EXCEPTION 'Missing required IPD constraint: %', required_constraint;
+        END IF;
+    END LOOP;
+
+    FOREACH required_index IN ARRAY ARRAY[
+        'IX_inpatient_admissions_TenantId_HospitalId_PatientId',
+        'IX_inpatient_bed_placements_TenantId_AdmissionId',
+        'IX_inpatient_bed_placements_TenantId_BedId'
+    ]
+    LOOP
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_class index_class
+            JOIN pg_index index_metadata ON index_metadata.indexrelid = index_class.oid
+            WHERE index_class.relname = required_index
+              AND index_metadata.indisunique
+        ) THEN
+            RAISE EXCEPTION 'Missing required IPD unique index: %', required_index;
+        END IF;
+    END LOOP;
+END
+$;
+SQL
+echo "  ✓ IPD tables, hospital-registration/facility constraints and active occupancy indexes are present"
+
 echo "Checking Web and API..."
 curl_local http://localhost:8080/ >/dev/null
 web_headers=$(curl --fail --silent --show-error --head http://localhost:8080/)
