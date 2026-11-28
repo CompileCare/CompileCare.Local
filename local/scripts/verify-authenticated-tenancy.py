@@ -531,13 +531,6 @@ def run() -> None:
         ),
     }
 
-    # Give the global operator a real tenant membership as well, matching the
-    # API-level regression fixture. This proves that even an operator who is
-    # also a persisted tenant member receives no implicit IPD permission.
-    create_membership(
-        api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["platform"], "FacilityViewer"
-    )
-
     hospital_a = create_hospital(
         api, tokens["shared"], tenant_a, "CI Hospital A", f"A-{suffix.upper()}"
     )
@@ -663,10 +656,11 @@ def run() -> None:
         "ClinicalUser": tokens["clinical-user"],
     }
 
-    # IPD permissions are intentionally not granted to any current role until
-    # the hospital-approved six-role matrix is accepted. Verify the boundary
-    # with real Keycloak tokens and persisted memberships, including a global
-    # PlatformOperator who also has an explicit tenant FacilityViewer role.
+    # IPD permissions are intentionally not granted to any current tenant role
+    # until the hospital-approved six-role matrix is accepted. Verify every
+    # persisted tenant role with real Keycloak-issued tokens. PlatformOperator
+    # without tenant membership is checked separately below before adding an
+    # explicit tenant membership for the dual-role authorization regression.
     zero_id = "00000000-0000-0000-0000-000000000000"
     ipd_routes = (
         ("GET", f"/api/v1/hospitals/{hospital_a}/ipd/admissions?page=1&pageSize=25", None),
@@ -691,7 +685,7 @@ def run() -> None:
             },
         ),
     )
-    ipd_role_tokens = {**role_tokens, "PlatformOperator": tokens["platform"]}
+    ipd_role_tokens = role_tokens
     for role, role_token in ipd_role_tokens.items():
         for method, route, payload in ipd_routes:
             expect_api_status(
@@ -1885,6 +1879,25 @@ def run() -> None:
         "Platform operator without tenant membership cannot select tenant A",
         api, "GET", "/api/v1/hospitals", tokens["platform"], tenant_a, 403
     )
+
+    # Preserve the preceding negative case: first prove the global operator
+    # cannot select a tenant without membership. Then add an explicit persisted
+    # FacilityViewer membership for that same identity and verify it still
+    # receives no IPD permission through its global PlatformOperator status.
+    create_membership(
+        api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["platform"], "FacilityViewer"
+    )
+    for method, route, payload in ipd_routes:
+        expect_api_status(
+            f"PlatformOperator with tenant membership is denied IPD {method} {route.split('/ipd/', 1)[-1].split('/')[0]}",
+            api,
+            method,
+            route,
+            tokens["platform"],
+            tenant_a,
+            403,
+            payload,
+        )
     expect_api_status(
         "Authenticated request without tenant selection is rejected",
         api, "GET", "/api/v1/hospitals", tokens["shared"], None, 400
