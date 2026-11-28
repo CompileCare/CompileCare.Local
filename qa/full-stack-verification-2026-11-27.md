@@ -154,4 +154,20 @@ The Local PR workflow checks out the current `main` branches of API, Web and Obs
 
 **Acceptance boundary:** this rerun verifies the current merged API integration and IPD negative authorization in an isolated synthetic stack. It does not grant IPD permissions, prove a positive admission-to-discharge workflow, verify the user's developer Mac/Windows installation, or replace manual accessibility, clinical governance, privacy/security or production recovery sign-off.
 
-**Run evidence:** pending the full-stack CI result for this PR. Append the run URL, exact checked-out SHAs and outcomes here after completion; do not infer success from the PR being merged.
+### Completed current-IPD-main full-stack run — 2026-11-28
+
+- Run: [HeapCare.Local full-stack verification #46115877875](https://github.com/HeapCare/HeapCare.Local/actions/runs/46115877875).
+- Full nine-service job: [Full nine-service Docker stack and API telemetry verification](https://github.com/HeapCare/HeapCare.Local/actions/runs/46115877875/job/140889482721) — **Success**. Local validation job also passed.
+- Exact checked-out commits recorded by the job:
+  - HeapCare.Local PR merge ref: `1728e714f689ed413596f723a9e01fd43b2ccf0d` (PR #47 head `f9e2950d95952201bb30cfceff7dc311b9d40256`, based on Local main `19929c3ec999f3f38d5dd9aa6661916247e74a49`).
+  - HeapCare.Api: `39c40bb7ccdb899b23684b18595293c331a79078` (API PR #146 merge; current API main after PRs #143–#146).
+  - HeapCare.Web: `afb61cfbd77aab837ed65dcb30043519c27a5684`.
+  - HeapCare.Observability: `84bc2ec84de9a1378ac376491d6f6e38dfdcabb6`.
+- Stack and schema: all nine application/observability services started; PostgreSQL readiness, IPD admission/bed-placement tables, hospital-registration/facility constraints, active-occupancy indexes, Keycloak OIDC discovery and Web CSP checks passed.
+- Observability: API traces, Npgsql database spans and Collector-fed ASP.NET Core metrics were verified through Jaeger/Collector.
+- Real identity and IPD authorization: the real-Keycloak acceptance script verified issuer/audience, persisted role permissions and tenant boundaries. HospitalAdmin, FacilityManager, FacilityViewer, PatientRegistrar, ClinicalUser and platform-only PlatformOperator were denied all five current IPD routes with HTTP 403. No IPD permission grant was added.
+- Database recovery smoke: PostgreSQL logical backup and isolated restore passed; all 28 application tables restored with matching row counts. This is not provider-native PITR or production DR evidence.
+- Browser: all 11 real OIDC Chromium tests passed; the six-role authenticated accessibility baseline passed in Firefox (6/6) and Playwright WebKit (6/6).
+- Cleanup: the isolated Docker project/volumes and CI-only browser/environment secrets were removed; the job completed successfully.
+
+**Acceptance boundary:** this is synthetic Linux CI evidence for the exact four repository SHAs above. It verifies negative IPD authorization against API PR #146 mainline but does not approve positive IPD roles, complete an admission-to-discharge clinical workflow, replace the manual Windows/macOS/Ubuntu accessibility matrix, or establish production backup/PITR, infrastructure or hospital pilot approval.
