@@ -531,6 +531,13 @@ def run() -> None:
         ),
     }
 
+    # Give the global operator a real tenant membership as well, matching the
+    # API-level regression fixture. This proves that even an operator who is
+    # also a persisted tenant member receives no implicit IPD permission.
+    platform_viewer_membership = create_membership(
+        api, tokens["tenant-a-admin"], tenant_a, issuer, subjects["platform"], "FacilityViewer"
+    )
+
     hospital_a = create_hospital(
         api, tokens["shared"], tenant_a, "CI Hospital A", f"A-{suffix.upper()}"
     )
@@ -655,6 +662,49 @@ def run() -> None:
         "PatientRegistrar": tokens["patient-registrar"],
         "ClinicalUser": tokens["clinical-user"],
     }
+
+    # IPD permissions are intentionally not granted to any current role until
+    # the hospital-approved six-role matrix is accepted. Verify the boundary
+    # with real Keycloak tokens and persisted memberships, including a global
+    # PlatformOperator who also has an explicit tenant FacilityViewer role.
+    zero_id = "00000000-0000-0000-0000-000000000000"
+    ipd_routes = (
+        ("GET", f"/api/v1/hospitals/{hospital_a}/ipd/admissions?page=1&pageSize=25", None),
+        ("GET", f"/api/v1/hospitals/{hospital_a}/ipd/admissions/{zero_id}", None),
+        ("POST", f"/api/v1/hospitals/{hospital_a}/ipd/admissions", {"patientId": zero_id}),
+        (
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/ipd/admissions/{zero_id}/bed-placement",
+            {"departmentId": zero_id, "wardId": zero_id, "roomId": zero_id, "bedId": zero_id},
+        ),
+        (
+            "POST",
+            f"/api/v1/hospitals/{hospital_a}/ipd/admissions/{zero_id}/bed-transfer",
+            {
+                "destination": {
+                    "departmentId": zero_id,
+                    "wardId": zero_id,
+                    "roomId": zero_id,
+                    "bedId": zero_id,
+                },
+                "reason": "CI permission boundary verification",
+            },
+        ),
+    )
+    ipd_role_tokens = {**role_tokens, "PlatformOperator": tokens["platform"]}
+    for role, role_token in ipd_role_tokens.items():
+        for method, route, payload in ipd_routes:
+            expect_api_status(
+                f"{role} is denied IPD {method} {route.split('/ipd/', 1)[-1].split('/')[0]}",
+                api,
+                method,
+                route,
+                role_token,
+                tenant_a,
+                403,
+                payload,
+            )
+
     for role, role_token in role_tokens.items():
         role_contexts = require_status(
             f"Read persisted {role} tenant context",
@@ -2001,6 +2051,7 @@ def run() -> None:
     print("Verified real Keycloak-issued identities for all five persisted tenant roles and server-derived role permissions.")
     print("Verified hospital data isolation, cross-tenant membership mutation denial, and membership revocation/reactivation.")
     print("Verified FacilityViewer and ClinicalUser/FacilityManager patient-search denials and PatientRegistrar patient-search access.")
+    print("Verified all persisted tenant roles and PlatformOperator are denied every IPD route until role permissions are approved.")
     print("No real patient or billing data was created.")
 
 
